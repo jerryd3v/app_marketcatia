@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 
+import '../constants/geo_reference.dart';
 import '../providers/app_provider.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
@@ -19,7 +20,7 @@ class _AccountScreenState extends State<AccountScreen> {
   List<Map<String, dynamic>> _orders = [];
   bool _loadingOrders = false;
 
-  static const _catiaLatLng = LatLng(10.484616, -66.848402);
+  static const _catiaLatLng = catiaReferenceLocation;
 
   @override
   void initState() {

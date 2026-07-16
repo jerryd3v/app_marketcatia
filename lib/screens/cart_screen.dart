@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -13,8 +14,10 @@ import '../providers/app_provider.dart';
 import '../services/api_service.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/delivery_cost.dart';
 import '../utils/pricing.dart';
 import '../widgets/add_products_modal.dart';
+import '../widgets/delivery_map_section.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({
@@ -37,7 +40,12 @@ class _CartScreenState extends State<CartScreen> {
   String _deliveryType = 'pickup';
   double _bcvRate = 0;
   double _deliveryCost = 0;
+  DeliveryCostRates _deliveryRates = DeliveryCostRates.defaults;
   bool _loadingRates = false;
+  double? _deliveryDistanceKm;
+  LatLng? _deliveryDest;
+  String? _deliveryAddress;
+  String? _deliveryLocationName;
 
   final _refCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -93,8 +101,11 @@ class _CartScreenState extends State<CartScreen> {
       ]);
       _bcvRate = results[0] as double;
       final delivery = results[1] as Map<String, dynamic>;
-      _deliveryCost =
-          ((delivery['cost'] ?? delivery['price'] ?? 0) as num).toDouble();
+      _deliveryRates = DeliveryCostRates.fromApi(delivery);
+      // Sin destino aún: no fijar costo fijo; se calcula con el mapa.
+      if (_deliveryType == 'pickup') {
+        _deliveryCost = 0;
+      }
     } catch (_) {}
     if (mounted) setState(() => _loadingRates = false);
   }
@@ -119,7 +130,8 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _pickPaymentImage() async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.camera);
+    // Como la web: input type=file (galería), no cámara.
+    final file = await picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
     final bytes = await file.readAsBytes();
     setState(() {
@@ -175,6 +187,13 @@ class _CartScreenState extends State<CartScreen> {
         'subtotal': _subtotal,
         'deliveryType': _deliveryType,
         'deliveryCost': _deliveryFee,
+        'deliveryDistanceKm': _deliveryDistanceKm,
+        'deliveryAddress': _deliveryAddress,
+        'deliveryLocationName': _deliveryLocationName,
+        if (_deliveryDest != null) ...{
+          'deliveryLat': _deliveryDest!.latitude,
+          'deliveryLng': _deliveryDest!.longitude,
+        },
         'total': _total,
         'totalBs': _totalBs,
         'bcvRate': _bcvRate,
@@ -433,8 +452,8 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ),
         _SectionCard(
-          title: 'Tipo de entrega',
-          icon: Icons.local_shipping_outlined,
+          title: 'Ubicación de entrega',
+          icon: Icons.location_on_outlined,
           child: Column(
             children: [
               _DeliveryOption(
@@ -444,18 +463,41 @@ class _CartScreenState extends State<CartScreen> {
                 subtitle: provider.sedeSeleccionada != null
                     ? provider.sedeSeleccionada!.name
                     : 'Sin costo adicional',
-                onTap: () => setState(() => _deliveryType = 'pickup'),
+                onTap: () => setState(() {
+                  _deliveryType = 'pickup';
+                  _deliveryCost = 0;
+                  _deliveryDistanceKm = null;
+                }),
               ),
               const SizedBox(height: 10),
               _DeliveryOption(
                 selected: _deliveryType == 'delivery',
                 icon: Icons.delivery_dining,
-                title: 'Delivery',
-                subtitle: _deliveryCost > 0
-                    ? 'Costo: ${_fmt.format(_deliveryCost)}'
-                    : 'Se calculará el costo',
+                title: 'Delivery a domicilio',
+                subtitle: _deliveryDistanceKm != null
+                    ? 'Costo: ${_fmt.format(_deliveryCost)} · ${_deliveryDistanceKm!.toStringAsFixed(1)} km'
+                    : 'Marca tu ubicación en el mapa',
                 onTap: () => setState(() => _deliveryType = 'delivery'),
               ),
+              if (_deliveryType == 'delivery')
+                DeliveryMapSection(
+                  rates: _deliveryRates,
+                  onCostChanged: ({
+                    required cost,
+                    required distanceKm,
+                    destination,
+                    address,
+                    locationName,
+                  }) {
+                    setState(() {
+                      _deliveryCost = cost;
+                      _deliveryDistanceKm = distanceKm;
+                      _deliveryDest = destination;
+                      _deliveryAddress = address;
+                      _deliveryLocationName = locationName;
+                    });
+                  },
+                ),
             ],
           ),
         ),
@@ -666,12 +708,19 @@ class _CartScreenState extends State<CartScreen> {
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: _pickPaymentImage,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Capturar comprobante (OCR)'),
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Subir comprobante'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.primary, width: 2),
                   minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'JPG, PNG o WebP. Al seleccionar la imagen se lee el comprobante.',
+                  style: TextStyle(fontSize: 12, color: AppColors.textLight),
                 ),
               ),
               if (_paymentImage != null) ...[
@@ -824,6 +873,17 @@ class _CartScreenState extends State<CartScreen> {
                             final user = context.read<AppProvider>().user;
                             if (user == null) {
                               context.push('/login');
+                              return;
+                            }
+                            if (_deliveryType == 'delivery' &&
+                                _deliveryDest == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Marca tu ubicación en el mapa para continuar',
+                                  ),
+                                ),
+                              );
                               return;
                             }
                             setState(() => _step = 1);

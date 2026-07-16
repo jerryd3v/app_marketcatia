@@ -141,9 +141,9 @@ class _ProductCardState extends State<ProductCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Imagen compacta para caber 2×2 en viewport
+          // .product-image web ≈ 120px en móvil
           SizedBox(
-            height: 78,
+            height: 110,
             child: Stack(
               children: [
                 Container(
@@ -155,44 +155,44 @@ class _ProductCardState extends State<ProductCard> {
                       colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
                     ),
                   ),
-                  padding: const EdgeInsets.all(6),
+                  padding: const EdgeInsets.all(12),
                   child: product.displayImage.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: product.displayImage,
                           fit: BoxFit.contain,
                           placeholder: (_, _) => const Center(
                             child: SizedBox(
-                              width: 16,
-                              height: 16,
+                              width: 20,
+                              height: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                           ),
                           errorWidget: (_, _, _) => const Center(
-                            child: Text('📦', style: TextStyle(fontSize: 24)),
+                            child: Text('📦', style: TextStyle(fontSize: 32)),
                           ),
                         )
                       : const Center(
-                          child: Text('📦', style: TextStyle(fontSize: 24)),
+                          child: Text('📦', style: TextStyle(fontSize: 32)),
                         ),
                 ),
                 if (discount > 0)
                   Positioned(
-                    top: 4,
-                    right: 4,
+                    top: 8,
+                    right: 8,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
+                        horizontal: 8,
+                        vertical: 4,
                       ),
                       decoration: BoxDecoration(
                         color: AppColors.discount,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
                         'OFERTA',
                         style: TextStyle(
                           color: Colors.white,
-                          fontSize: 8,
+                          fontSize: 10,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -203,7 +203,7 @@ class _ProductCardState extends State<ProductCard> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -212,13 +212,13 @@ class _ProductCardState extends State<ProductCard> {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 11,
+                      fontSize: 14, // 0.875rem web
                       fontWeight: FontWeight.w600,
                       color: AppColors.textDark,
-                      height: 1.2,
+                      height: 1.3,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 10),
                   if (isWholesale && options.isNotEmpty)
                     _PresentationSelector(
                       options: options,
@@ -230,7 +230,7 @@ class _ProductCardState extends State<ProductCard> {
                     Text(
                       'Precio unitario',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 14,
                         fontWeight: FontWeight.w500,
                         color: AppColors.retail,
                       ),
@@ -247,7 +247,7 @@ class _ProductCardState extends State<ProductCard> {
                                   Text(
                                     '\$${_priceFmt.format(strike)}',
                                     style: const TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 13,
                                       color: AppColors.textLight,
                                       decoration: TextDecoration.lineThrough,
                                     ),
@@ -255,7 +255,7 @@ class _ProductCardState extends State<ProductCard> {
                                   Text(
                                     '\$${_priceFmt.format(display)}',
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.w700,
                                       color: AppColors.discount,
                                     ),
@@ -265,7 +265,7 @@ class _ProductCardState extends State<ProductCard> {
                             : Text(
                                 '\$${_priceFmt.format(display)}',
                                 style: const TextStyle(
-                                  fontSize: 14,
+                                  fontSize: 16, // 1rem web
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primary,
                                 ),
@@ -324,10 +324,10 @@ class _PresentationSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
@@ -336,24 +336,34 @@ class _PresentationSelector extends StatelessWidget {
               child: GestureDetector(
                 onTap: o.stockOk ? () => onSelect(o.key) : null,
                 child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
+                  duration: const Duration(milliseconds: 150),
                   margin: const EdgeInsets.symmetric(horizontal: 1),
-                  padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 1),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
                   decoration: BoxDecoration(
                     color: !o.stockOk
                         ? const Color(0xFFE2E8F0)
                         : selected == o.key
                             ? Colors.white
                             : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(6),
                     border: Border.all(
                       color: !o.stockOk
                           ? Colors.transparent
                           : selected == o.key
                               ? AppColors.primary
                               : Colors.transparent,
-                      width: 1.5,
+                      width: 2,
                     ),
+                    boxShadow: selected == o.key && o.stockOk
+                        ? [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Opacity(
                     opacity: o.stockOk ? 1 : 0.45,
@@ -364,10 +374,10 @@ class _PresentationSelector extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 9,
+                            fontSize: 12, // 0.75rem web
                             fontWeight: FontWeight.w600,
                             color: AppColors.textDark,
-                            height: 1.1,
+                            height: 1.15,
                           ),
                         ),
                         Text(
@@ -375,20 +385,21 @@ class _PresentationSelector extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 7,
+                            fontSize: 10, // 0.625rem web
                             color: AppColors.textLight,
-                            height: 1.1,
+                            height: 1.15,
                           ),
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           '\$${_priceFmt.format(getCasheaAdjustedUnitPrice(o.price, o.key, isCashea))}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 9,
+                            fontSize: 12, // 0.75rem web
                             fontWeight: FontWeight.w700,
                             color: AppColors.primary,
-                            height: 1.1,
+                            height: 1.15,
                           ),
                         ),
                       ],
@@ -418,27 +429,27 @@ class _AddBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     if (inCart) {
       return Container(
-        width: 30,
-        height: 30,
+        width: 36,
+        height: 36,
         decoration: const BoxDecoration(
           shape: BoxShape.circle,
           color: AppColors.success,
         ),
-        child: const Icon(Icons.check, color: Colors.white, size: 16),
+        child: const Icon(Icons.check, color: Colors.white, size: 18),
       );
     }
     if (!canAdd) {
       return Container(
-        width: 30,
-        height: 30,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: const Color(0xFFF1F5F9),
-          border: Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
+          border: Border.all(color: const Color(0xFFCBD5E1), width: 2),
         ),
         child: const Icon(
           Icons.inventory_2_outlined,
-          size: 14,
+          size: 16,
           color: Color(0xFF64748B),
         ),
       );
@@ -449,13 +460,13 @@ class _AddBtn extends StatelessWidget {
         onTap: onAdd,
         customBorder: const CircleBorder(),
         child: Ink(
-          width: 30,
-          height: 30,
+          width: 36,
+          height: 36,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
             gradient: AppColors.primaryGradient,
           ),
-          child: const Icon(Icons.add, color: Colors.white, size: 18),
+          child: const Icon(Icons.add, color: Colors.white, size: 20),
         ),
       ),
     );
@@ -482,13 +493,13 @@ class ProductGrid extends StatelessWidget {
       );
     }
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        // Más ancho relativo → tarjetas más bajas → caben 4 en pantalla
-        childAspectRatio: 0.72,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        // Proporción web: tarjeta más alta, tipografía legible
+        childAspectRatio: 0.58,
       ),
       itemCount: products.length,
       itemBuilder: (_, i) => ProductCard(product: products[i]),
