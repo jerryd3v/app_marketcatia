@@ -64,9 +64,11 @@ class Product {
       cantidadUnidad: m['cantidadUnidad'] ?? 1,
       cantidadMayor: m['cantidadMayor'] ?? 6,
       cantidadBulto: m['cantidadBulto'] ?? 12,
-      statusUnidad: m['statusUnidad'] == true || m['statusUnidad'] == null,
-      statusMayor: m['statusMayor'] == true,
-      statusBulto: m['statusBulto'] == true,
+      statusUnidad: m['statusUnidad'] != false,
+      statusMayor: m['statusMayor'] != false &&
+          (m['priceMayor'] != null || m['precioMayor'] != null),
+      statusBulto: m['statusBulto'] != false &&
+          (m['priceBulto'] != null || m['precioBulto'] != null),
       imgUrl: m['imgUrl']?.toString(),
       imgUrl100: m['imgUrl100']?.toString(),
       imgUrl250: m['imgUrl250']?.toString(),

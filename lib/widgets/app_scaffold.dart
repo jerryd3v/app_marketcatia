@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import 'app_header.dart';
 import 'bottom_nav.dart';
 import 'emily_chat_widget.dart';
+import 'market_search_bar.dart';
 import 'mode_notification.dart';
 import 'payment_modality_prompt.dart';
 
@@ -61,33 +62,13 @@ class _SearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.cardBg,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: TextField(
-        key: const Key('search-input'),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: MarketSearchBar(
         focusNode: app.searchFocusNode,
         onChanged: app.setBusqueda,
-        decoration: InputDecoration(
-          hintText: 'Buscar productos...',
-          prefixIcon: const Icon(Icons.search, color: AppColors.textLight),
-          suffixIcon: app.busqueda.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => app.setBusqueda(''),
-                )
-              : null,
-          filled: true,
-          fillColor: AppColors.lightBg,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
-            borderSide: const BorderSide(color: AppColors.border),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppColors.radiusMd),
-            borderSide: const BorderSide(color: AppColors.border),
-          ),
-        ),
+        value: app.busqueda,
+        fillColor: AppColors.cardBg,
+        onClear: app.busqueda.isNotEmpty ? () => app.setBusqueda('') : null,
       ),
     );
   }

@@ -22,7 +22,7 @@ class AppHeader extends StatelessWidget {
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
           child: Consumer<AppProvider>(
             builder: (context, app, _) {
               return Column(
@@ -32,9 +32,9 @@ class AppHeader extends StatelessWidget {
                       Expanded(child: _BranchSelector(app: app)),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   const Divider(height: 1, color: AppColors.border),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       GestureDetector(
@@ -44,7 +44,7 @@ class AppHeader extends StatelessWidget {
                         },
                         child: Image.asset(
                           'assets/images/icon.png',
-                          height: 40,
+                          height: 32,
                           errorBuilder: (_, __, ___) => const Text(
                             'Marketcatia',
                             style: TextStyle(

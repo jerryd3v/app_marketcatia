@@ -6,6 +6,7 @@ import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import 'app_scaffold.dart';
 
+/// Barra inferior baja: ~44px + poco aire sobre el home indicator.
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key});
 
@@ -13,25 +14,19 @@ class BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
     final app = context.watch<AppProvider>();
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    // No sumar el safe-area completo: la barra se veía demasiado alta.
+    final bottomPad = bottomInset > 0 ? (bottomInset - 16).clamp(4.0, 18.0) : 2.0;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cardBg.withValues(alpha: 0.95),
-        border: const Border(top: BorderSide(color: AppColors.border)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+    return Material(
+      color: AppColors.cardBg.withValues(alpha: 0.97),
+      elevation: 6,
+      shadowColor: Colors.black26,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomPad),
+        child: SizedBox(
+          height: 44,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _NavItem(
                 icon: Icons.home_rounded,
@@ -90,77 +85,70 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: GestureDetector(
+      child: InkWell(
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          transform: Matrix4.translationValues(0, active ? -4 : 0, 0),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            gradient: active ? AppColors.navActiveGradient : null,
-            borderRadius: BorderRadius.circular(AppColors.radiusLg),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            clipBehavior: Clip.none,
-            children: [
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (active)
-                    Container(
-                      width: 24,
-                      height: 3,
-                      margin: const EdgeInsets.only(bottom: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    )
-                  else
-                    const SizedBox(height: 7),
-                  Icon(
-                    icon,
-                    size: active ? 26 : 22,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 20,
+                  color: active ? AppColors.primary : AppColors.textLight,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                     color: active ? AppColors.primary : AppColors.textLight,
+                    height: 1,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                      color: active ? AppColors.primary : AppColors.textLight,
-                    ),
+                ),
+              ],
+            ),
+            if (active)
+              Positioned(
+                top: 2,
+                child: Container(
+                  width: 16,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(1),
                   ),
-                ],
+                ),
               ),
-              if (badge > 0)
-                Positioned(
-                  top: 0,
-                  right: 18,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: AppColors.discount,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
-                    ),
-                    child: Text(
-                      '$badge',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                      ),
+            if (badge > 0)
+              Positioned(
+                top: 2,
+                right: 18,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 14),
+                  height: 14,
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.discount,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: Text(
+                    '$badge',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
