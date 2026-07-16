@@ -6,20 +6,30 @@ import '../models/models.dart';
 class ApiService {
   Future<List<Product>> searchProducts(String term, {int limit = 20}) async {
     if (term.trim().length < 2) return [];
+    return reportProducts(name: term.trim(), limit: limit);
+  }
+
+  /// Misma API que el modal web (`POST /products/system_report`).
+  /// Sin [name] envía `{}` y trae el listado inicial al abrir el modal.
+  Future<List<Product>> reportProducts({String? name, int? limit}) async {
+    final body = <String, dynamic>{};
+    if (name != null && name.trim().isNotEmpty) {
+      body['name'] = name.trim();
+    }
     final res = await http.post(
       Uri.parse(ApiConfig.productsReport),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': term.trim()}),
+      body: jsonEncode(body),
     );
     if (res.statusCode >= 400) {
       throw Exception('Error búsqueda: ${res.statusCode}');
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final list = (data['data'] as List? ?? [])
+    var list = (data['data'] as List? ?? [])
         .whereType<Map>()
         .map((e) => Product.fromMap(Map<String, dynamic>.from(e)))
-        .take(limit)
         .toList();
+    if (limit != null) list = list.take(limit).toList();
     return list;
   }
 

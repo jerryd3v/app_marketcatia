@@ -113,24 +113,88 @@ List<CartItem> syncCartLinesWithPaymentModality(
   return revertCasheaBulkSurcharge(items);
 }
 
-bool isStockAllowedForAddToCart(dynamic stock) {
-  if (stock == null) return true;
-  if (stock is bool) return stock;
-  if (stock is num) return stock > 0;
-  final s = stock.toString().toLowerCase();
-  if (s == 'out' || s == 'agotado' || s == '0' || s == 'false') return false;
-  return true;
+/// Reserva mínima (unidades físicas) — misma regla que `stockLevel.js` web.
+const int minStockForAddToCart = 3;
+
+double? getStockNumeric(dynamic stock) {
+  if (stock == null) return null;
+  if (stock is bool) return stock ? null : 0;
+  if (stock is num) {
+    if (!stock.isFinite || stock < 0) return null;
+    return stock.toDouble();
+  }
+  final s = stock.toString().toLowerCase().trim();
+  if (s == 'out' || s == 'agotado' || s == 'false') return 0;
+  final n = double.tryParse(s);
+  if (n == null || !n.isFinite || n < 0) return null;
+  return n;
+}
+
+double? getSellableBaseUnits(dynamic stock) {
+  final n = getStockNumeric(stock);
+  if (n == null) return null;
+  return (n - minStockForAddToCart).clamp(0, double.infinity);
 }
 
 num getPresentationBaseUnits(Product product, String presentacion) {
-  switch (presentacion) {
-    case 'Mayor':
-      return product.cantidadMayor;
-    case 'Bulto':
-      return product.cantidadBulto;
-    default:
-      return product.cantidadUnidad;
+  final lower = presentacion.trim().toLowerCase();
+  if (lower == 'unidad' || lower == 'und') {
+    return product.cantidadUnidad < 1 ? 1 : product.cantidadUnidad;
   }
+  if (lower == 'mayor') {
+    return product.cantidadMayor < 1 ? 1 : product.cantidadMayor;
+  }
+  if (lower == 'bulto' || lower == 'lote' || lower == 'caja') {
+    return product.cantidadBulto < 1 ? 1 : product.cantidadBulto;
+  }
+  return 1;
+}
+
+bool isPresentationAllowedByStock(dynamic stock, num baseUnitsNeeded) {
+  final sellable = getSellableBaseUnits(stock);
+  if (sellable == null) return true;
+  final need = baseUnitsNeeded < 1 ? 1 : baseUnitsNeeded;
+  return sellable >= need;
+}
+
+bool isStockAllowedForAddToCart(dynamic stock) {
+  final sellable = getSellableBaseUnits(stock);
+  if (sellable == null) return true;
+  return sellable >= 1;
+}
+
+bool firebaseProductHasSellablePresentation(Product product, dynamic stock) {
+  final checks = <bool>[];
+  if (product.price != null && product.statusUnidad) {
+    checks.add(isPresentationAllowedByStock(
+      stock,
+      getPresentationBaseUnits(product, 'Unidad'),
+    ));
+  }
+  if (product.priceMayor != null && product.statusMayor) {
+    checks.add(isPresentationAllowedByStock(
+      stock,
+      getPresentationBaseUnits(product, 'Mayor'),
+    ));
+  }
+  if (product.priceBulto != null && product.statusBulto) {
+    checks.add(isPresentationAllowedByStock(
+      stock,
+      getPresentationBaseUnits(product, 'Bulto'),
+    ));
+  }
+  if (checks.isEmpty) return isStockAllowedForAddToCart(stock);
+  return checks.any((ok) => ok);
+}
+
+enum StockLevel { unknown, critical, warning, ok }
+
+StockLevel getStockLevel(dynamic stock) {
+  final n = getStockNumeric(stock);
+  if (n == null) return StockLevel.unknown;
+  if (n <= minStockForAddToCart) return StockLevel.critical;
+  if (n <= 100) return StockLevel.warning;
+  return StockLevel.ok;
 }
 
 /// Parsea id de temp-order: `uuid&type=CASHEA`

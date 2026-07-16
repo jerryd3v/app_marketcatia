@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../models/models.dart';
+import '../models/payment_store_settings.dart';
 
 class FirebaseService {
   FirebaseFirestore get db => FirebaseFirestore.instance;
@@ -79,13 +80,15 @@ class FirebaseService {
     }
   }
 
-  Future<Map<String, dynamic>?> fetchPagoMovilStore() async {
+  /// Misma fuente que web: `app_settings/pago_movil_store` + defaults.
+  Future<PaymentStoreSettings> fetchPagoMovilStore() async {
     try {
       final doc =
           await db.collection('app_settings').doc('pago_movil_store').get();
-      return doc.data();
+      if (!doc.exists) return PaymentStoreSettings.defaults;
+      return PaymentStoreSettings.normalize(doc.data());
     } catch (_) {
-      return null;
+      return PaymentStoreSettings.defaults;
     }
   }
 

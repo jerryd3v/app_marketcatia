@@ -27,14 +27,19 @@ class _EmilyChatWidgetState extends State<EmilyChatWidget> {
   @override
   void initState() {
     super.initState();
-    _checkEnabled();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkEnabled());
   }
 
   Future<void> _checkEnabled() async {
+    if (!mounted) return;
     final app = context.read<AppProvider>();
-    final res = await app.api.chatbotEnabled();
-    final enabled = res['enabled'] != false && (res['apiReady'] != false);
-    if (mounted) setState(() => _enabled = enabled);
+    try {
+      final res = await app.api.chatbotEnabled();
+      final enabled = res['enabled'] != false && (res['apiReady'] != false);
+      if (mounted) setState(() => _enabled = enabled);
+    } catch (_) {
+      if (mounted) setState(() => _enabled = false);
+    }
   }
 
   void _connect() {

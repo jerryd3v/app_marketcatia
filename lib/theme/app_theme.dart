@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppTheme {
@@ -17,7 +16,8 @@ class AppTheme {
     );
 
     return base.copyWith(
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+      textTheme: base.textTheme.apply(
+        fontFamily: 'Roboto',
         bodyColor: AppColors.textDark,
         displayColor: AppColors.textDark,
       ),
@@ -26,7 +26,7 @@ class AppTheme {
         foregroundColor: AppColors.textDark,
         elevation: 0,
         shadowColor: Colors.black12,
-        titleTextStyle: GoogleFonts.inter(
+        titleTextStyle: const TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 18,
           color: AppColors.textDark,
@@ -41,7 +41,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppColors.radiusMd),
           ),
-          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

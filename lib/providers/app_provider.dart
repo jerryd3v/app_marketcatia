@@ -411,6 +411,12 @@ class AppProvider extends ChangeNotifier {
   }) async {
     if (!isStockAllowedForAddToCart(product.stock)) return;
     final pres = presentacion ?? _defaultPresentacion(product);
+    if (!isPresentationAllowedByStock(
+      product.stock,
+      getPresentationBaseUnits(product, pres),
+    )) {
+      return;
+    }
     var unitPrice = _priceForPresentacion(product, pres);
     final discountPct = resolveProductLevelDiscountPercent(product.discounts);
     if (discountPct > 0) {
@@ -457,6 +463,68 @@ class AppProvider extends ChangeNotifier {
     }
     await _persistCart();
     notifyListeners();
+  }
+
+  /// Lógica del modal web `agregarProductoAlCarrito`: 1 producto por id por compra.
+  /// Devuelve mensaje de error o `null` si se agregó.
+  Future<String?> agregarProductoDesdeModalCarrito(
+    Product product,
+    String presentacion, {
+    int cantidad = 1,
+  }) async {
+    if (presentacion.isEmpty) {
+      return 'Seleccione una presentación';
+    }
+    if (!isPresentationAllowedByStock(
+      product.stock,
+      getPresentationBaseUnits(product, presentacion),
+    )) {
+      return 'Sin stock para esta presentación';
+    }
+    if (carrito.any((c) => c.id == product.id)) {
+      return 'Este producto ya está en el carrito. Solo se puede agregar una vez por compra.';
+    }
+
+    final qty = cantidad < 1 ? 1 : cantidad;
+    var unitPrice = _priceForPresentacion(product, presentacion);
+    final discountPct = resolveProductLevelDiscountPercent(product.discounts);
+    var precioFinal = unitPrice;
+    if (discountPct > 0) {
+      precioFinal = redondear(unitPrice * (1 - discountPct / 100));
+    }
+    final catalogPrice = unitPrice;
+    if (isCashea && presentationIsCasheaBulk(presentacion)) {
+      precioFinal = getCasheaAdjustedUnitPrice(unitPrice, presentacion, true);
+    }
+
+    carrito.add(CartItem(
+      id: product.id,
+      nombre: product.name,
+      codigo: product.codigo,
+      precio: precioFinal,
+      precioOri: catalogPrice,
+      presentacion: presentacion,
+      cantidad: qty,
+      totalAux: redondear(precioFinal * qty),
+      precioUnidad: product.price,
+      precioMayor: product.priceMayor,
+      precioBulto: product.priceBulto,
+      cantidadBulto: getPresentationBaseUnits(product, presentacion),
+      cantidadUnidadOri: product.cantidadUnidad,
+      cantidadMayorOri: product.cantidadMayor,
+      cantidadBultoOri: product.cantidadBulto,
+      imgUrl100: product.imgUrl100 ?? product.imgUrl,
+      discounts: product.discounts,
+      taxable: product.taxable,
+      ivaRate: product.ivaRate,
+      peso: product.peso,
+      casheaSurchargeApplied:
+          isCashea && presentationIsCasheaBulk(presentacion),
+      precioCatalogoPresentacion: catalogPrice,
+    ));
+    await _persistCart();
+    notifyListeners();
+    return null;
   }
 
   Future<void> updateCartQty(String id, String presentacion, int qty) async {

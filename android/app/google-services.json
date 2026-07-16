@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "107853434846",
+    "project_id": "marketcatia-c91ae",
+    "storage_bucket": "marketcatia-c91ae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:107853434846:android:fabde4681ae9c0c0cb174f",
+        "android_client_info": {
+          "package_name": "com.marketcatia.app_marketcatia"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "107853434846-uuhr520g32ipq23k8f3dcsakevejunm7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5KojJdDISz0LgA6ERKWRGso4JHKsfOIY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "107853434846-uuhr520g32ipq23k8f3dcsakevejunm7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:107853434846:android:a85491c4c6775d9ccb174f",
+        "android_client_info": {
+          "package_name": "com.marketcatia.businessemployee"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "107853434846-uuhr520g32ipq23k8f3dcsakevejunm7.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5KojJdDISz0LgA6ERKWRGso4JHKsfOIY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "107853434846-uuhr520g32ipq23k8f3dcsakevejunm7.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
