@@ -34,8 +34,8 @@ class _EmilyChatWidgetState extends State<EmilyChatWidget> {
     if (!mounted) return;
     final app = context.read<AppProvider>();
     try {
-      final res = await app.api.chatbotEnabled();
-      final enabled = res['enabled'] != false && (res['apiReady'] != false);
+      // Fuente de verdad: app_settings/chatbot_app (admin). Sin doc → off.
+      final enabled = await app.firebase.fetchChatbotAppEnabled();
       if (mounted) setState(() => _enabled = enabled);
     } catch (_) {
       if (mounted) setState(() => _enabled = false);

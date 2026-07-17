@@ -11,7 +11,8 @@ class ApiConfig {
   static const String parsePaymentImage = '$apiBase/payments/parse-image';
   static const String validateCredit = '$apiBase/orders/validate-credit-purchase';
   static const String notifyPrinter = '$apiBase/orders/notify-printer';
-  static const String chatbotEnabled = '$apiBase/chatbot/enabled';
+  static const String nextOrderNumber = '$apiBase/orders/next-number';
+  static const String chatbotEnabled = '$apiBase/chatbot/enabled?channel=app';
   static const String orderNotification =
       'https://chatbot-marketcatia.up.railway.app/api/notification';
 

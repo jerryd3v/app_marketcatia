@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -92,6 +93,18 @@ class FirebaseService {
     }
   }
 
+  /// Bot de la app: `app_settings/chatbot_app`. Sin doc → deshabilitado.
+  Future<bool> fetchChatbotAppEnabled() async {
+    try {
+      final doc =
+          await db.collection('app_settings').doc('chatbot_app').get();
+      if (!doc.exists) return false;
+      return doc.data()?['enabled'] == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<AppUser?> fetchUser(String uid) async {
     final doc = await db.collection('user').doc(uid).get();
     if (!doc.exists) return null;
@@ -125,11 +138,20 @@ class FirebaseService {
       db.collection('user').doc(uid).update({'locations': locations});
 
   Future<List<Map<String, dynamic>>> fetchUserOrders(String uid) async {
-    final snap = await db
+    // Web guarda idUser; la app antigua guardaba uid.
+    final byUid = await db
         .collection('orders')
         .where('uid', isEqualTo: uid)
         .get();
-    return snap.docs.map((d) => {...d.data(), 'id': d.id}).toList();
+    final byIdUser = await db
+        .collection('orders')
+        .where('idUser', isEqualTo: uid)
+        .get();
+    final merged = <String, Map<String, dynamic>>{};
+    for (final d in [...byUid.docs, ...byIdUser.docs]) {
+      merged[d.id] = {...d.data(), 'id': d.id};
+    }
+    return merged.values.toList();
   }
 
   Future<Map<String, dynamic>?> fetchOrder(String id) async {
@@ -144,13 +166,51 @@ class FirebaseService {
     return {...doc.data()!, 'id': doc.id};
   }
 
-  Future<String> createOrder(Map<String, dynamic> data) async {
-    final ref = await db.collection('orders').add(data);
-    return ref.id;
+  Never _networkFail(String action) {
+    throw Exception(
+      'Sin conexión: no se pudo $action. Revisa Wi‑Fi o datos e intenta de nuevo.',
+    );
   }
 
-  Future<void> createPayment(Map<String, dynamic> data) =>
-      db.collection('payments').add(data);
+  /// Crea la orden con id = [docId] (número de pedido, como la web).
+  Future<String> createOrder(
+    Map<String, dynamic> data, {
+    required String docId,
+  }) async {
+    try {
+      final payload = Map<String, dynamic>.from(data);
+      final info = Map<String, dynamic>.from(
+        (payload['info'] as Map?)?.cast<String, dynamic>() ?? {},
+      );
+      info['created_at'] = FieldValue.serverTimestamp();
+      payload['info'] = info;
+      // ponytail: 30s — Firestore retries forever on bad DNS
+      await db
+          .collection('orders')
+          .doc(docId)
+          .set(payload)
+          .timeout(const Duration(seconds: 30));
+      return docId;
+    } on TimeoutException {
+      _networkFail('crear el pedido');
+    }
+  }
+
+  Future<void> createPayment(
+    Map<String, dynamic> data, {
+    String? docId,
+  }) async {
+    try {
+      final col = db.collection('payments');
+      if (docId != null && docId.isNotEmpty) {
+        await col.doc(docId).set(data).timeout(const Duration(seconds: 30));
+      } else {
+        await col.add(data).timeout(const Duration(seconds: 30));
+      }
+    } on TimeoutException {
+      _networkFail('registrar el pago');
+    }
+  }
 
   Future<String> uploadPaymentImage(
     String orderId,
@@ -158,8 +218,22 @@ class FirebaseService {
     String ext,
   ) async {
     final ref = storage.ref('images/payments/$orderId.$ext');
-    await ref.putData(Uint8List.fromList(bytes));
-    return ref.getDownloadURL();
+    try {
+      // ponytail: Storage backoff hangs UI; fail fast so user can retry
+      await ref
+          .putData(Uint8List.fromList(bytes))
+          .timeout(const Duration(seconds: 45));
+      return await ref.getDownloadURL().timeout(const Duration(seconds: 20));
+    } on TimeoutException {
+      _networkFail('subir el comprobante');
+    } on FirebaseException catch (e) {
+      if (e.code == 'retry-limit-exceeded' ||
+          e.code == 'unknown' ||
+          (e.message ?? '').toLowerCase().contains('network')) {
+        _networkFail('subir el comprobante');
+      }
+      rethrow;
+    }
   }
 
   Future<List<Map<String, dynamic>>> fetchDiscounts() async {

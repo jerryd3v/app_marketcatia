@@ -520,12 +520,30 @@ class CategoryGrid extends StatelessWidget {
       );
     }
     if (app.categorias.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'No se pudieron cargar las categorías.\nVerifica Firebase.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textLight),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Text(
+              'No se pudieron cargar las categorías.\nDesliza hacia abajo o reintenta.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textLight),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Future.wait([
+                  app.loadCategorias(),
+                  app.loadSedes(),
+                  app.loadBestSellers(),
+                  app.loadBanners(),
+                  app.loadDailyOffers(),
+                ]);
+              },
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+            ),
+          ],
         ),
       );
     }

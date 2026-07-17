@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import 'orders_history_modal.dart';
 
 class AppHeader extends StatelessWidget {
   const AppHeader({super.key});
@@ -253,59 +254,9 @@ class _MisPedidosButton extends StatelessWidget {
 
   Future<void> _showOrders(BuildContext context, String uid) async {
     final app = context.read<AppProvider>();
-    showDialog(
-      context: context,
-      builder: (ctx) => FutureBuilder(
-        future: app.firebase.fetchUserOrders(uid),
-        builder: (context, snap) {
-          if (!snap.hasData) {
-            return const AlertDialog(
-              content: SizedBox(
-                height: 80,
-                child: Center(child: CircularProgressIndicator()),
-              ),
-            );
-          }
-          final orders = List<Map<String, dynamic>>.from(snap.data ?? [])
-              .where((o) => o['trash'] != true && o['type'] != 'credit_note')
-              .toList();
-          return AlertDialog(
-            title: const Text('Mis pedidos'),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 360,
-              child: orders.isEmpty
-                  ? const Center(child: Text('No tienes pedidos aún'))
-                  : ListView.separated(
-                      itemCount: orders.length,
-                      separatorBuilder: (_, __) => const Divider(),
-                      itemBuilder: (_, i) {
-                        final o = orders[i];
-                        final id = (o['id'] ?? '').toString();
-                        final status = (o['status'] ?? '').toString();
-                        final total = o['total'] ?? o['totalPedido'] ?? '';
-                        return ListTile(
-                          dense: true,
-                          title: Text('#${id.length > 8 ? id.substring(0, 8) : id}'),
-                          subtitle: Text('$status · \$$total'),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.pop(ctx);
-                            context.go('/order-view-v2/$id');
-                          },
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cerrar'),
-              ),
-            ],
-          );
-        },
-      ),
+    await showOrdersHistoryModal(
+      context,
+      loadOrders: () => app.firebase.fetchUserOrders(uid),
     );
   }
 }

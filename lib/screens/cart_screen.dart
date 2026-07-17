@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/cart_payment_modality.dart';
+import '../constants/venezuela_banks.dart';
 import '../models/models.dart';
 import '../models/payment_store_settings.dart';
 import '../providers/app_provider.dart';
@@ -49,11 +50,15 @@ class _CartScreenState extends State<CartScreen> {
 
   final _refCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _bankCtrl = TextEditingController();
+  final _amountBsCtrl = TextEditingController();
   final _commentCtrl = TextEditingController();
+  String _destBank = '';
+  String _issuerBank = '';
   Uint8List? _paymentImage;
   String? _paymentImageName;
   Map<String, dynamic>? _ocrResult;
+  String _parseStatus = 'idle'; // idle | loading | ok | error
+  String _parseMessage = '';
   PaymentStoreSettings _pagoMovilStore = PaymentStoreSettings.defaults;
 
   String? _createdOrderId;
@@ -66,11 +71,11 @@ class _CartScreenState extends State<CartScreen> {
   final _fmtBs = NumberFormat('#,##0.00');
 
   List<CartItem> get _cart =>
-      widget.initialCart ?? context.watch<AppProvider>().carrito;
+      widget.initialCart ?? context.read<AppProvider>().carrito;
 
   String? get _modality =>
       widget.initialPaymentModality ??
-      context.watch<AppProvider>().cartPaymentModality;
+      context.read<AppProvider>().cartPaymentModality;
 
   bool get _isCashea => _modality == CartPaymentModality.cashea;
 
@@ -133,26 +138,121 @@ class _CartScreenState extends State<CartScreen> {
     // Como la web: input type=file (galería), no cámara.
     final file = await picker.pickImage(source: ImageSource.gallery);
     if (file == null) return;
+    final name = file.name.toLowerCase();
+    final okExt = name.endsWith('.jpg') ||
+        name.endsWith('.jpeg') ||
+        name.endsWith('.png') ||
+        name.endsWith('.webp');
+    if (!okExt) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Para leer el comprobante automáticamente usa JPG, PNG o WebP.',
+          ),
+        ),
+      );
+      return;
+    }
     final bytes = await file.readAsBytes();
     setState(() {
       _paymentImage = bytes;
       _paymentImageName = file.name;
       _ocrResult = null;
+      _parseStatus = 'loading';
+      _parseMessage = 'Leyendo datos del comprobante…';
     });
     try {
       final result = await _api.parsePaymentImage(bytes, file.name);
+      final data = result['data'] ?? result;
+      if (!mounted) return;
       setState(() {
         _ocrResult = result;
-        final data = result['data'] ?? result;
         if (data is Map) {
-          _refCtrl.text =
-              (data['reference'] ?? data['referencia'] ?? _refCtrl.text)
-                  .toString();
-          _phoneCtrl.text =
-              (data['phone'] ?? data['telefono'] ?? _phoneCtrl.text).toString();
+          _applyParsedPaymentData(Map<String, dynamic>.from(data));
         }
+        _parseStatus = 'ok';
+        _parseMessage =
+            'Datos extraídos. Revisa y corrige los campos si hace falta.';
       });
-    } catch (_) {}
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _parseStatus = 'error';
+        _parseMessage = e.toString().replaceFirst('Exception: ', '').isNotEmpty
+            ? e.toString().replaceFirst('Exception: ', '')
+            : 'No se pudo analizar la imagen. Completa los datos manualmente.';
+      });
+    }
+  }
+
+  void _applyParsedPaymentData(Map<String, dynamic> data) {
+    final ref = (data['ref'] ?? data['reference'] ?? data['referencia'])
+        ?.toString()
+        .trim();
+    if (ref != null && ref.isNotEmpty) _refCtrl.text = ref;
+
+    final destRaw = [
+      data['destination_bank'],
+      data['destinationBank'],
+    ].map((x) => x?.toString().trim()).firstWhere(
+          (x) => x != null && x.isNotEmpty,
+          orElse: () => null,
+        );
+    if (destRaw != null) _destBank = resolveBankName(destRaw);
+
+    final issuerRaw = [
+      data['issuer_bank'],
+      data['issuerBank'],
+      data['issuerBankCode'],
+    ].map((x) => x?.toString().trim()).firstWhere(
+          (x) => x != null && x.isNotEmpty,
+          orElse: () => null,
+        );
+    if (issuerRaw != null) _issuerBank = resolveBankName(issuerRaw);
+
+    final amount = data['amount'];
+    if (amount != null) {
+      final n = amount is num ? amount.toDouble() : double.tryParse('$amount');
+      if (n != null && n.isFinite) {
+        _amountBsCtrl.text = n.toString();
+      }
+    }
+  }
+
+  void _clearPaymentUpload() {
+    setState(() {
+      _paymentImage = null;
+      _paymentImageName = null;
+      _ocrResult = null;
+      _parseStatus = 'idle';
+      _parseMessage = '';
+      _refCtrl.clear();
+      _phoneCtrl.clear();
+      _amountBsCtrl.clear();
+      _destBank = '';
+      _issuerBank = '';
+    });
+  }
+
+  String? _validatePaymentProof() {
+    if (_isCashea) return null;
+    if (_paymentImage == null) return 'Sube el comprobante de pago.';
+    if (_refCtrl.text.trim().isEmpty) {
+      return 'Ingresa la referencia o número de operación.';
+    }
+    if (_destBank.trim().isEmpty) return 'Selecciona el banco de destino.';
+    if (_issuerBank.trim().isEmpty) return 'Selecciona el banco emisor.';
+    final amount = double.tryParse(
+      _amountBsCtrl.text.trim().replaceAll(',', '.'),
+    );
+    if (amount == null || amount <= 0) {
+      return 'Ingresa el monto pagado en Bs (debe ser mayor a cero).';
+    }
+    if (_phoneCtrl.text.trim().isEmpty) {
+      return 'Ingresa el teléfono del pagador.';
+    }
+    return null;
   }
 
   Future<void> _createOrder() async {
@@ -178,14 +278,64 @@ class _CartScreenState extends State<CartScreen> {
         }
       }
 
-      final orderData = {
+      final productos = _cart.map((e) => e.toJson()).toList();
+      final deliveryType =
+          _deliveryType == 'delivery' ? 'delivery' : 'pickup';
+      final sede = provider.sedeSeleccionada;
+      final numeroPedido = await _api.fetchNextOrderNumber();
+      final orderId = '$numeroPedido';
+      final now = DateTime.now();
+      final fecha =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
+
+      final orderData = <String, dynamic>{
+        // Campos alineados con la web (impresora / admin / Mis pedidos)
+        'fecha': fecha,
+        'productos': productos,
+        'idUser': user.uid,
         'uid': user.uid,
+        'nombreUser': user.nombre,
+        'telefonoUser': user.telefono,
+        'documento': user.documento,
         'email': user.email,
-        'nombre': user.nombre,
-        'telefono': user.telefono,
-        'items': _cart.map((e) => e.toJson()).toList(),
+        'numeroPedido': numeroPedido,
+        'costoTotal': _total,
+        'products_total': _subtotal,
+        'shipping_cost': _deliveryFee,
+        'status': 'Pendiente',
+        'colorStatus': '#868e96',
+        'preparation_status': 'Pendiente',
+        'condicion': _isCashea ? 'Credito' : 'Contado',
+        'payment_method': _isCashea ? 'credit' : 'cash',
+        'trash': false,
+        'viewOrder': false,
+        'viewOrderPrinter': false,
+        'impreso': false,
+        'checkOrder': 'noVerificado',
+        'type': 'order',
+        'plataform': 'APP',
+        'delivery_type': deliveryType,
+        if (deliveryType == 'delivery') 'checkDelivery': 'Pendiente',
+        'delivery_address': _deliveryAddress,
+        'order_comment': _commentCtrl.text.trim().isEmpty
+            ? null
+            : _commentCtrl.text.trim(),
+        'currency': {'name': 'USD', 'symbol': '\$'},
+        'payment': {
+          'total_paid': 0,
+          'total_rest': _total,
+          'status': 'Pendiente',
+        },
+        if (sede != null)
+          'branch': {
+            'id': sede.id,
+            'name': sede.name,
+          },
+        if (_bcvRate > 0) 'tasa_dolar': double.parse(_bcvRate.toStringAsFixed(4)),
+        // Compat app
+        'items': productos,
         'subtotal': _subtotal,
-        'deliveryType': _deliveryType,
+        'deliveryType': deliveryType,
         'deliveryCost': _deliveryFee,
         'deliveryDistanceKm': _deliveryDistanceKm,
         'deliveryAddress': _deliveryAddress,
@@ -199,13 +349,12 @@ class _CartScreenState extends State<CartScreen> {
         'bcvRate': _bcvRate,
         'paymentModality': _modality,
         'comentario': _commentCtrl.text.trim(),
-        'branchId': provider.sedeSeleccionada?.id,
+        'branchId': sede?.id,
         'modo': provider.modo,
-        'status': 'pendiente',
-        'createdAt': DateTime.now().toIso8601String(),
+        'createdAt': now.toIso8601String(),
       };
 
-      final orderId = await _firebase.createOrder(orderData);
+      await _firebase.createOrder(orderData, docId: orderId);
 
       if (_paymentImage != null) {
         final ext = _paymentImageName?.split('.').last ?? 'jpg';
@@ -214,22 +363,47 @@ class _CartScreenState extends State<CartScreen> {
           _paymentImage!.toList(),
           ext,
         );
-        await _firebase.createPayment({
-          'orderId': orderId,
-          'uid': user.uid,
-          'type': _modality,
-          'reference': _refCtrl.text.trim(),
-          'phone': _phoneCtrl.text.trim(),
-          'bank': _bankCtrl.text.trim(),
-          'imageUrl': url,
-          'ocr': _ocrResult,
-          'amount': _total,
-          'amountBs': _totalBs,
-        });
+        await _firebase.createPayment(
+          {
+            'id': numeroPedido,
+            'orderId': orderId,
+            'uid': user.uid,
+            'idUser': user.uid,
+            'type': 'Pago móvil',
+            'reference': _refCtrl.text.trim(),
+            'ref': _refCtrl.text.trim(),
+            'phone': _phoneCtrl.text.trim(),
+            'telefonoPagador': _phoneCtrl.text.trim(),
+            'bancoEmisor': _issuerBank,
+            'bancoDestino': _destBank,
+            'bank': _issuerBank,
+            'imageUrl': url,
+            'capture': url,
+            'ocr': _ocrResult,
+            'amount': _total,
+            'amountBs': double.tryParse(
+                  _amountBsCtrl.text.trim().replaceAll(',', '.'),
+                ) ??
+                _totalBs,
+            'monto': double.tryParse(
+                  _amountBsCtrl.text.trim().replaceAll(',', '.'),
+                ) ??
+                _totalBs,
+          },
+          docId: orderId,
+        );
       }
 
-      await _api.notifyOrderCreated({'orderId': orderId, 'uid': user.uid});
-      await _api.notifyPrinter({'orderId': orderId});
+      await _api.notifyOrderCreated({
+        'orderId': orderId,
+        'numeroPedido': numeroPedido,
+        'uid': user.uid,
+      });
+      // API espera `order` = número secuencial (no el docId aleatorio)
+      await _api.notifyPrinter({
+        'order': numeroPedido,
+        'sede': sede?.raw['codigo'] ?? sede?.id,
+      });
 
       if (!widget.embedded) {
         await provider.clearCart();
@@ -240,7 +414,13 @@ class _CartScreenState extends State<CartScreen> {
         _step = 2;
       });
     } catch (e) {
-      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      if (!mounted) return;
+      final raw = e.toString().replaceFirst('Exception: ', '');
+      setState(() {
+        _error = raw.contains('Sin conexión')
+            ? raw
+            : (raw.isEmpty ? 'No se pudo emitir el pedido.' : raw);
+      });
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -250,17 +430,15 @@ class _CartScreenState extends State<CartScreen> {
   void dispose() {
     _refCtrl.dispose();
     _phoneCtrl.dispose();
-    _bankCtrl.dispose();
+    _amountBsCtrl.dispose();
     _commentCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_cart.isEmpty && _step == 0 && !widget.embedded) {
-      return _EmptyCart(onShop: () => context.go('/'));
-    }
-
+    // Escucha cambios del carrito/modalidad (los getters usan read para callbacks).
+    context.watch<AppProvider>();
     return ColoredBox(
       color: AppColors.lightBg,
       child: Column(
@@ -381,54 +559,75 @@ class _CartScreenState extends State<CartScreen> {
         _SectionCard(
           title: 'Detalle de tu pedido',
           icon: Icons.inventory_2_outlined,
-          child: _cart.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: Text(
-                      'No hay productos en el carrito',
-                      style: TextStyle(color: AppColors.textLight),
-                    ),
+          child: Column(
+            children: [
+              if (_cart.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
                   ),
-                )
-              : Column(
-                  children: [
-                    for (var i = 0; i < _cart.length; i++) ...[
-                      if (i > 0)
-                        const Divider(height: 1, color: AppColors.border),
-                      _CartLineItem(
-                        item: _cart[i],
-                        embedded: widget.embedded,
-                        fmt: _fmt,
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    _AmountBreakdown(
-                      subtotal: _subtotal,
-                      deliveryFee: _deliveryFee,
-                      deliveryType: _deliveryType,
-                      total: _total,
-                      totalBs: _totalBs,
-                      bcvRate: _bcvRate,
-                      loadingRates: _loadingRates,
-                      fmt: _fmt,
-                      fmtBs: _fmtBs,
-                    ),
-                    if (!widget.embedded) ...[
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: () => showAddProductsModal(context),
-                        icon: const Icon(Icons.add_circle_outline),
-                        label: const Text('Agregar Más Productos'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.textDark,
-                          side: const BorderSide(color: AppColors.border),
-                          minimumSize: const Size(double.infinity, 44),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3CD),
+                    borderRadius: BorderRadius.circular(AppColors.radiusSm),
+                    border: Border.all(color: const Color(0xFFFFECB5)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.shopping_cart_outlined,
+                          color: Color(0xFF856404), size: 20),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'No hay productos en el pedido.',
+                          style: TextStyle(
+                            color: Color(0xFF856404),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
-                  ],
+                  ),
+                )
+              else ...[
+                for (var i = 0; i < _cart.length; i++) ...[
+                  if (i > 0)
+                    const Divider(height: 1, color: AppColors.border),
+                  _CartLineItem(
+                    item: _cart[i],
+                    embedded: widget.embedded,
+                    fmt: _fmt,
+                  ),
+                ],
+              ],
+              const SizedBox(height: 16),
+              _AmountBreakdown(
+                subtotal: _subtotal,
+                deliveryFee: _deliveryFee,
+                deliveryType: _deliveryType,
+                total: _total,
+                totalBs: _totalBs,
+                bcvRate: _bcvRate,
+                loadingRates: _loadingRates,
+                fmt: _fmt,
+                fmtBs: _fmtBs,
+              ),
+              if (!widget.embedded) ...[
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: () => showAddProductsModal(context),
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text('Agregar Más Productos'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textDark,
+                    side: const BorderSide(color: AppColors.border),
+                    minimumSize: const Size(double.infinity, 44),
+                  ),
                 ),
+              ],
+            ],
+          ),
         ),
         _SectionCard(
           title: 'Comentario de la orden',
@@ -680,35 +879,9 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Datos del comprobante',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textDark,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _CheckoutField(
-                controller: _refCtrl,
-                label: 'Referencia',
-                hint: 'Últimos dígitos de la referencia',
-              ),
-              const SizedBox(height: 12),
-              _CheckoutField(
-                controller: _phoneCtrl,
-                label: 'Teléfono emisor',
-                hint: '04XX…',
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 12),
-              _CheckoutField(
-                controller: _bankCtrl,
-                label: 'Banco emisor',
-              ),
-              const SizedBox(height: 16),
               OutlinedButton.icon(
-                onPressed: _pickPaymentImage,
-                icon: const Icon(Icons.upload_file),
+                onPressed: _parseStatus == 'loading' ? null : _pickPaymentImage,
+                icon: const Icon(Icons.cloud_upload_outlined),
                 label: const Text('Subir comprobante'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
@@ -719,7 +892,7 @@ class _CartScreenState extends State<CartScreen> {
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(
-                  'JPG, PNG o WebP. Al seleccionar la imagen se lee el comprobante.',
+                  'JPG, PNG o WebP (obligatorio). Al seleccionar la imagen se envía al servicio de lectura del comprobante.',
                   style: TextStyle(fontSize: 12, color: AppColors.textLight),
                 ),
               ),
@@ -729,20 +902,150 @@ class _CartScreenState extends State<CartScreen> {
                   borderRadius: BorderRadius.circular(AppColors.radiusMd),
                   child: Image.memory(
                     _paymentImage!,
-                    height: 140,
+                    height: 160,
                     width: double.infinity,
                     fit: BoxFit.cover,
                   ),
                 ),
+                TextButton(
+                  onPressed: _clearPaymentUpload,
+                  child: const Text('Quitar imagen'),
+                ),
               ],
-              if (_ocrResult != null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    'OCR: datos detectados automáticamente',
-                    style: TextStyle(color: AppColors.success, fontSize: 12),
+              if (_parseStatus != 'idle') ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _parseStatus == 'loading'
+                        ? const Color(0xFFEFF6FF)
+                        : _parseStatus == 'ok'
+                            ? const Color(0xFFECFDF5)
+                            : const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border(
+                      left: BorderSide(
+                        width: 4,
+                        color: _parseStatus == 'loading'
+                            ? AppColors.primary
+                            : _parseStatus == 'ok'
+                                ? AppColors.success
+                                : AppColors.discount,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      if (_parseStatus == 'loading') ...[
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: Text(
+                          _parseMessage,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: _parseStatus == 'error'
+                                ? AppColors.discount
+                                : AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ],
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.edit_outlined, color: AppColors.primary, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Datos del pago',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _CheckoutField(
+                controller: _refCtrl,
+                label: 'Referencia / número de operación',
+                hint: 'Ej. últimos dígitos o referencia completa',
+              ),
+              const SizedBox(height: 12),
+              _BankDropdown(
+                label: 'Banco de destino (receptor)',
+                value: _destBank,
+                extraValue: _destBank.isNotEmpty &&
+                        !venezuelaBanks.any((b) => b.name == _destBank)
+                    ? _destBank
+                    : null,
+                onChanged: (v) => setState(() => _destBank = v ?? ''),
+              ),
+              const SizedBox(height: 12),
+              _BankDropdown(
+                label: 'Banco emisor (pagador)',
+                value: _issuerBank,
+                extraValue: _issuerBank.isNotEmpty &&
+                        !venezuelaBanks.any((b) => b.name == _issuerBank)
+                    ? _issuerBank
+                    : null,
+                onChanged: (v) => setState(() => _issuerBank = v ?? ''),
+              ),
+              const SizedBox(height: 12),
+              _CheckoutField(
+                controller: _amountBsCtrl,
+                label: 'Monto pagado (Bs)',
+                hint: '0.00',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+              ),
+              const SizedBox(height: 12),
+              _CheckoutField(
+                controller: _phoneCtrl,
+                label: 'Teléfono del pagador',
+                hint: 'Ej. 04141234567',
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Fecha del pago (automatica): ${DateFormat('dd/MM/yyyy').format(DateTime.now())}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textLight,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _totalBs > 0
+                    ? 'Total (Bs): Bs. ${_fmtBs.format(_totalBs)}'
+                    : 'Total: ${_fmt.format(_total)}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _loadingRates
+                    ? 'Cargando tasa...'
+                    : _bcvRate > 0
+                        ? 'Tasa BCV: Bs. ${_fmtBs.format(_bcvRate)}'
+                        : 'Tasa BCV no disponible',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textLight,
+                ),
+              ),
             ],
           ),
         ),
@@ -870,6 +1173,16 @@ class _CartScreenState extends State<CartScreen> {
                       ? null
                       : () {
                           if (_step == 0) {
+                            if (_cart.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Agrega productos al carrito antes de continuar.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
                             final user = context.read<AppProvider>().user;
                             if (user == null) {
                               context.push('/login');
@@ -888,6 +1201,15 @@ class _CartScreenState extends State<CartScreen> {
                             }
                             setState(() => _step = 1);
                           } else {
+                            if (_step == 1) {
+                              final err = _validatePaymentProof();
+                              if (err != null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(err)),
+                                );
+                                return;
+                              }
+                            }
                             _createOrder();
                           }
                         },
@@ -912,7 +1234,7 @@ class _CartScreenState extends State<CartScreen> {
                       : Text(
                           _step == 0
                               ? 'Continuar al pago'
-                              : 'Confirmar pedido',
+                              : (_isCashea ? 'Pagar con Cashea' : 'Emitir Pedido'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                 ),
@@ -926,72 +1248,6 @@ class _CartScreenState extends State<CartScreen> {
 }
 
 // ─── Shared visual pieces (alineados a temp-order.css / ShoppingCar) ───
-
-class _EmptyCart extends StatelessWidget {
-  const _EmptyCart({required this.onShop});
-  final VoidCallback onShop;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.lightBg,
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.shopping_cart_outlined,
-                  size: 44,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Tu carrito está vacío',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Explora el catálogo y agrega productos',
-                style: TextStyle(color: AppColors.textLight),
-              ),
-              const SizedBox(height: 24),
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(AppColors.radiusMd),
-                ),
-                child: ElevatedButton(
-                  onPressed: onShop,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(200, 48),
-                  ),
-                  child: const Text('Ir a comprar'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _CheckoutProgress extends StatelessWidget {
   const _CheckoutProgress({required this.step});
@@ -1946,6 +2202,89 @@ class _BankDetailRow extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _BankDropdown extends StatelessWidget {
+  const _BankDropdown({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.extraValue,
+  });
+
+  final String label;
+  final String value;
+  final String? extraValue;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(
+        value: '',
+        child: Text('Seleccione un banco'),
+      ),
+      ...venezuelaBanks.map(
+        (b) => DropdownMenuItem(
+          value: b.name,
+          child: Text(b.label, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    ];
+    if (extraValue != null &&
+        extraValue!.isNotEmpty &&
+        !venezuelaBanks.any((b) => b.name == extraValue)) {
+      items.add(
+        DropdownMenuItem(
+          value: extraValue,
+          child: Text(
+            '$extraValue (texto detectado)',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      );
+    }
+
+    final effectiveValue = value.isEmpty
+        ? ''
+        : (items.any((i) => i.value == value) ? value : '');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textMedium,
+          ),
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          // ignore: deprecated_member_use
+          value: effectiveValue.isEmpty ? '' : effectiveValue,
+          items: items,
+          onChanged: onChanged,
+          isExpanded: true,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.lightBg,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppColors.radiusMd),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppColors.radiusMd),
+              borderSide: const BorderSide(color: AppColors.border),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
