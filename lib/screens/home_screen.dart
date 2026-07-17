@@ -6,8 +6,32 @@ import '../theme/app_colors.dart';
 import '../widgets/catalog_widgets.dart';
 import '../widgets/home_sections.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _offersKey = GlobalKey();
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToOffers() {
+    final ctx = _offersKey.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 400),
+      curve: Curves.easeOut,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +92,7 @@ class HomeScreen extends StatelessWidget {
       );
     }
 
+    // Home: banner → categorías → ofertas → más vendidos (como web)
     return RefreshIndicator(
       onRefresh: () async {
         await Future.wait([
@@ -79,6 +104,7 @@ class HomeScreen extends StatelessWidget {
         ]);
       },
       child: ListView(
+        controller: _scrollController,
         children: [
           if (!app.firebaseReady)
             Container(
@@ -94,8 +120,7 @@ class HomeScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 12, color: AppColors.textMedium),
               ),
             ),
-          const AdBannerCarousel(),
-          const DailyOffersSection(),
+          AdBannerCarousel(onScrollToOffers: _scrollToOffers),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Text(
@@ -104,6 +129,10 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const CategoryGrid(),
+          KeyedSubtree(
+            key: _offersKey,
+            child: const DailyOffersSection(),
+          ),
           const FeaturedCarousel(),
           const SizedBox(height: 24),
         ],

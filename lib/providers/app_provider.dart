@@ -6,23 +6,29 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/cart_payment_modality.dart';
+import '../models/campaign_product.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/firebase_service.dart';
+import '../services/promo_service.dart';
 import '../utils/pricing.dart';
 
 class AppProvider extends ChangeNotifier {
   AppProvider({
     ApiService? api,
     FirebaseService? firebase,
+    PromoService? promo,
   })  : _api = api ?? ApiService(),
-        _firebase = firebase ?? FirebaseService();
+        _firebase = firebase ?? FirebaseService(),
+        _promo = promo ?? PromoService();
 
   final ApiService _api;
   final FirebaseService _firebase;
+  final PromoService _promo;
 
   ApiService get api => _api;
   FirebaseService get firebase => _firebase;
+  PromoService get promo => _promo;
 
   final FocusNode searchFocusNode = FocusNode();
 
@@ -49,7 +55,9 @@ class AppProvider extends ChangeNotifier {
   bool focusSearchRequest = false;
   String? productoIdParaScroll;
   List<Map<String, dynamic>> banners = [];
-  List<Map<String, dynamic>> dailyOffers = [];
+  Map<String, dynamic>? activeDailyOffer;
+  List<CampaignProductView> dailyOfferProducts = [];
+  bool cargandoOfertas = false;
   List<Product> bestSellers = [];
 
   bool loadingInit = false;
@@ -171,12 +179,76 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
     try {
       categorias = await _firebase.fetchCategories();
+      // Ofertas necesitan categorías para etiquetas; re-resuelve si ya hay campaña.
+      if (activeDailyOffer != null) {
+        unawaited(_loadDailyOffers());
+      }
     } catch (_) {
       categorias = [];
     } finally {
       cargandoCategorias = false;
       notifyListeners();
     }
+  }
+
+  void openCategoryById(String? categoryId) {
+    if (categoryId == null || categoryId.isEmpty) return;
+    final cat = categorias.cast<CategoryItem?>().firstWhere(
+          (c) => c!.id == categoryId || c.key == categoryId,
+          orElse: () => null,
+        );
+    if (cat != null) setCategoria(cat);
+  }
+
+  void openSubcategoryByIds(String? categoryId, String? subcategoryId) {
+    if (categoryId == null || subcategoryId == null) return;
+    final cat = categorias.cast<CategoryItem?>().firstWhere(
+          (c) => c!.id == categoryId || c.key == categoryId,
+          orElse: () => null,
+        );
+    if (cat == null) return;
+    categoriaSeleccionada = cat;
+    final sub = cat.subCategories.cast<Map?>().firstWhere(
+          (s) =>
+              (s!['id'] ?? s['idSubCategory'] ?? '').toString() == subcategoryId,
+          orElse: () => null,
+        );
+    if (sub == null) {
+      setCategoria(cat);
+      return;
+    }
+    setSubcategoria(Map<String, dynamic>.from(sub));
+  }
+
+  void goToCampaignProduct(CampaignProductView view) {
+    openProductInCatalog(view.product, scrollToId: view.id);
+  }
+
+  void openProductInCatalog(Product product, {String? scrollToId}) {
+    final raw = product.raw;
+    final subCats = raw['sub_categories'] ?? raw['subCategories'];
+    if (subCats is List && subCats.isNotEmpty) {
+      final first = subCats.first;
+      final subId = first is Map
+          ? (first['id'] ?? first['_id'] ?? '').toString()
+          : '';
+      if (subId.isNotEmpty) {
+        for (final cat in categorias) {
+          final sub = cat.subCategories.cast<Map?>().firstWhere(
+                (s) =>
+                    (s!['id'] ?? s['_id'] ?? '').toString() == subId,
+                orElse: () => null,
+              );
+          if (sub != null) {
+            categoriaSeleccionada = cat;
+            productoIdParaScroll = scrollToId ?? product.id;
+            setSubcategoria(Map<String, dynamic>.from(sub));
+            return;
+          }
+        }
+      }
+    }
+    setBusqueda(product.name);
   }
 
   Future<void> _loadBranches() async {
@@ -205,7 +277,7 @@ class AppProvider extends ChangeNotifier {
     cargandoBanners = true;
     notifyListeners();
     try {
-      banners = await _firebase.fetchPromoBanners();
+      banners = await _promo.fetchActivePromoBanners();
     } catch (_) {
       banners = [];
     } finally {
@@ -215,10 +287,28 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _loadDailyOffers() async {
+    cargandoOfertas = true;
+    notifyListeners();
     try {
-      dailyOffers = await _firebase.fetchDailyOffers();
+      final offer = await _promo.fetchActiveDailyOfferForToday();
+      activeDailyOffer = offer;
+      if (offer == null) {
+        dailyOfferProducts = [];
+      } else {
+        dailyOfferProducts = await _promo.resolveCampaignProducts(
+          offer,
+          modo: modo,
+          categorias: categorias,
+          promoSource: 'daily_offer',
+        );
+      }
+    } catch (_) {
+      activeDailyOffer = null;
+      dailyOfferProducts = [];
+    } finally {
+      cargandoOfertas = false;
       notifyListeners();
-    } catch (_) {}
+    }
   }
 
   Future<void> _loadBestSellers() async {
@@ -249,6 +339,7 @@ class AppProvider extends ChangeNotifier {
     await clearCart();
     modeNotificationVisible = true;
     notifyListeners();
+    unawaited(_loadDailyOffers());
     Future.delayed(const Duration(seconds: 3), () {
       modeNotificationVisible = false;
       notifyListeners();

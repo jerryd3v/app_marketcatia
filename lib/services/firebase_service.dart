@@ -47,7 +47,7 @@ class FirebaseService {
         .toList();
   }
 
-  Future<List<Product>> fetchBestSellers({int limit = 12}) async {
+  Future<List<Product>> fetchBestSellers({int limit = 16}) async {
     final snap = await db
         .collection('products')
         .where('show', isEqualTo: true)

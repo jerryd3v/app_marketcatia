@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../models/campaign_product.dart';
 import '../providers/app_provider.dart';
-import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
+import '../widgets/home_sections.dart';
 
 class CampaignScreen extends StatefulWidget {
   const CampaignScreen({
@@ -22,180 +23,263 @@ class CampaignScreen extends StatefulWidget {
 }
 
 class _CampaignScreenState extends State<CampaignScreen> {
-  final _firebase = FirebaseService();
-  Map<String, dynamic>? _banner;
-  bool _loading = false;
+  bool _loading = true;
+  Map<String, dynamic>? _hero;
+  List<CampaignProductView> _products = [];
+  String _filter = 'todos';
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    if (widget.bannerId != null) _loadBanner();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _loadBanner() async {
-    setState(() => _loading = true);
+  Future<void> _load() async {
+    final app = context.read<AppProvider>();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      _banner = await _firebase.fetchBanner(widget.bannerId!);
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      Map<String, dynamic>? campaign;
+      Map<String, dynamic> hero;
+
+      if (widget.isDailyOffers) {
+        campaign = await app.promo.fetchActiveDailyOfferForToday();
+        if (campaign == null) {
+          throw Exception('No hay ofertas activas hoy');
+        }
+        hero = {
+          'title': campaign['nombre'] ?? 'Ofertas del Día',
+          'subtitle':
+              'Promoción válida del ${campaign['startDate']} al ${campaign['endDate']}',
+          'backgroundType': 'gradient',
+          'iconEmoji': '🏷️',
+          'notice': promoNoticeDailyOffer,
+        };
+      } else {
+        final id = widget.bannerId ?? '';
+        campaign = await app.promo.fetchPromoBannerById(id);
+        if (campaign == null) throw Exception('Campaña no encontrada');
+        hero = {
+          'title': campaign['titulo'] ?? campaign['title'] ?? 'Campaña',
+          'subtitle': campaign['subtitulo'] ?? campaign['subtitle'] ?? '',
+          'backgroundType': campaign['backgroundType'],
+          'backgroundGradient': campaign['backgroundGradient'],
+          'backgroundImageUrl': campaign['backgroundImageUrl'],
+          'iconType': campaign['iconType'],
+          'iconEmoji': campaign['iconEmoji'] ?? '🔥',
+          'iconImageUrl': campaign['iconImageUrl'],
+          'notice': promoNoticeBanner,
+        };
+      }
+
+      final products = await app.promo.resolveCampaignProducts(
+        campaign,
+        modo: app.modo,
+        categorias: app.categorias,
+        promoSource: widget.isDailyOffers ? 'daily_offer' : 'banner',
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _hero = hero;
+        _products = products;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _hero = null;
+        _products = [];
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (widget.isDailyOffers) {
-      return _DailyOffersPage();
-    }
-
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
     }
-
-    if (_banner == null) {
-      return const Center(child: Text('Campaña no encontrada'));
-    }
-
-    final imageUrl =
-        (_banner!['imageUrl'] ?? _banner!['imgUrl'] ?? '').toString();
-    final title = (_banner!['title'] ?? _banner!['nombre'] ?? 'Campaña').toString();
-    final description =
-        (_banner!['description'] ?? _banner!['descripcion'] ?? '').toString();
-    final link = (_banner!['link'] ?? _banner!['url'] ?? '').toString();
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (imageUrl.isNotEmpty)
-            CachedNetworkImage(
-              imageUrl: imageUrl,
-              height: 220,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorWidget: (_, __, ___) => _placeholder(title),
-            )
-          else
-            _placeholder(title),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(description, style: const TextStyle(color: AppColors.textMedium)),
-                ],
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => context.go('/'),
-                  child: const Text('Ver productos'),
-                ),
-                if (link.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: () {},
-                    child: const Text('Más información'),
-                  ),
-                ],
-              ],
-            ),
+    if (_error != null || _hero == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _error ?? 'Campaña no encontrada',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textMedium),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton(
+                onPressed: () => context.go('/'),
+                child: const Text('Volver al inicio'),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _placeholder(String title) {
-    return Container(
-      height: 220,
-      decoration: const BoxDecoration(
-        gradient: AppColors.primaryGradient,
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
         ),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-}
-
-class _DailyOffersPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final offers = context.watch<AppProvider>().dailyOffers;
-
-    if (offers.isEmpty) {
-      return const Center(child: Text('No hay ofertas del día disponibles'));
+      );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: offers.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final offer = offers[index];
-        final name = (offer['name'] ?? offer['title'] ?? 'Oferta').toString();
-        final pct = offer['percent'] ?? offer['discount'];
-        final desc = (offer['description'] ?? '').toString();
+    final app = context.watch<AppProvider>();
+    final filters = app.promo.buildOfferCategoryFilters(_products);
+    final filtered = _filter == 'todos'
+        ? _products
+        : _products.where((p) => p.categoryName == _filter).toList();
+    final title = (_hero!['title'] ?? '').toString();
+    final subtitle = (_hero!['subtitle'] ?? '').toString();
+    final notice = (_hero!['notice'] ?? '').toString();
+    final bgImage = (_hero!['backgroundImageUrl'] ?? '').toString();
+    final isImage = _hero!['backgroundType'] == 'image' && bgImage.isNotEmpty;
 
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                if (pct != null)
-                  Container(
-                    width: 64,
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: AppColors.discountBg,
-                      borderRadius: BorderRadius.circular(8),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(
+                gradient: isImage
+                    ? null
+                    : (widget.isDailyOffers
+                        ? const LinearGradient(
+                            colors: [
+                              AppColors.campaignStart,
+                              AppColors.campaignEnd,
+                            ],
+                          )
+                        : AppColors.primaryGradient),
+                image: isImage
+                    ? DecorationImage(
+                        image: CachedNetworkImageProvider(bgImage),
+                        fit: BoxFit.cover,
+                      )
+                    : null,
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                color: isImage ? Colors.black38 : null,
+                alignment: Alignment.bottomLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Text(
+                      (_hero!['iconEmoji'] ?? '').toString(),
+                      style: const TextStyle(fontSize: 28),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '-$pct%',
+                    const SizedBox(height: 6),
+                    Text(
+                      title,
                       style: const TextStyle(
-                        color: AppColors.discount,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 18,
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                  ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                    if (subtitle.isNotEmpty) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 13,
                         ),
                       ),
-                      if (desc.isNotEmpty)
-                        Text(desc, style: const TextStyle(color: AppColors.textLight)),
                     ],
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        );
-      },
+          if (notice.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Text(
+                  notice,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textLight,
+                  ),
+                ),
+              ),
+            ),
+          if (filters.length > 1)
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 48,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: const Text('Todos'),
+                        selected: _filter == 'todos',
+                        onSelected: (_) => setState(() => _filter = 'todos'),
+                      ),
+                    ),
+                    for (final f in filters)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: ChoiceChip(
+                          label: Text('${f.icon} ${f.name}'),
+                          selected: _filter == f.name,
+                          onSelected: (_) =>
+                              setState(() => _filter = f.name),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          if (filtered.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(
+                child: Text(
+                  'Sin productos en esta categoría',
+                  style: TextStyle(color: AppColors.textLight),
+                ),
+              ),
+            )
+          else
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 0.72,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) {
+                    final p = filtered[i];
+                    return OfferProductCard(
+                      product: p,
+                      width: null,
+                      onTap: () {
+                        context.go('/');
+                        app.goToCampaignProduct(p);
+                      },
+                    );
+                  },
+                  childCount: filtered.length,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
