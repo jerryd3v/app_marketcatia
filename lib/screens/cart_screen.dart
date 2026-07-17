@@ -98,21 +98,24 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Future<void> _loadRates() async {
+    if (!mounted) return;
     setState(() => _loadingRates = true);
     try {
-      final results = await Future.wait([
-        _api.fetchBcvRate(),
-        _api.fetchDeliveryCost(),
-      ]);
-      _bcvRate = results[0] as double;
-      final delivery = results[1] as Map<String, dynamic>;
-      _deliveryRates = DeliveryCostRates.fromApi(delivery);
-      // Sin destino aún: no fijar costo fijo; se calcula con el mapa.
-      if (_deliveryType == 'pickup') {
-        _deliveryCost = 0;
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _loadingRates = false);
+      // En paralelo; cada request tiene su propio timeout en ApiService.
+      final rateFuture = _api.fetchBcvRate().catchError((_) => 0.0);
+      final deliveryFuture = _api.fetchDeliveryCost();
+      final rate = await rateFuture;
+      final delivery = await deliveryFuture;
+      if (!mounted) return;
+      setState(() {
+        _bcvRate = rate;
+        _deliveryRates = DeliveryCostRates.fromApi(delivery);
+        if (_deliveryType == 'pickup') _deliveryCost = 0;
+        _loadingRates = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingRates = false);
+    }
   }
 
   Future<void> _loadPagoMovilStore() async {
@@ -610,6 +613,7 @@ class _CartScreenState extends State<CartScreen> {
                 totalBs: _totalBs,
                 bcvRate: _bcvRate,
                 loadingRates: _loadingRates,
+                onRetryRates: _loadRates,
                 fmt: _fmt,
                 fmtBs: _fmtBs,
               ),
@@ -1035,17 +1039,42 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                _loadingRates
-                    ? 'Cargando tasa...'
-                    : _bcvRate > 0
-                        ? 'Tasa BCV: Bs. ${_fmtBs.format(_bcvRate)}'
-                        : 'Tasa BCV no disponible',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textLight,
+              if (_loadingRates)
+                const Text(
+                  'Cargando tasa...',
+                  style: TextStyle(fontSize: 12, color: AppColors.textLight),
+                )
+              else if (_bcvRate > 0)
+                Text(
+                  'Tasa BCV: Bs. ${_fmtBs.format(_bcvRate)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textLight,
+                  ),
+                )
+              else
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Tasa BCV no disponible',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textLight,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _loadRates,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text('Reintentar', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
                 ),
-              ),
             ],
           ),
         ),
@@ -1818,6 +1847,7 @@ class _AmountBreakdown extends StatelessWidget {
     required this.totalBs,
     required this.bcvRate,
     required this.loadingRates,
+    required this.onRetryRates,
     required this.fmt,
     required this.fmtBs,
   });
@@ -1829,6 +1859,7 @@ class _AmountBreakdown extends StatelessWidget {
   final double totalBs;
   final double bcvRate;
   final bool loadingRates;
+  final VoidCallback onRetryRates;
   final NumberFormat fmt;
   final NumberFormat fmtBs;
 
@@ -1896,15 +1927,39 @@ class _AmountBreakdown extends StatelessWidget {
                     width: 120,
                     child: LinearProgressIndicator(minHeight: 2),
                   )
-                : Text(
-                    bcvRate > 0
-                        ? 'Tasa BCV: Bs. ${fmtBs.format(bcvRate)}'
-                        : 'Tasa BCV no disponible',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textLight,
-                    ),
-                  ),
+                : bcvRate > 0
+                    ? Text(
+                        'Tasa BCV: Bs. ${fmtBs.format(bcvRate)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textLight,
+                        ),
+                      )
+                    : Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Tasa BCV no disponible',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textLight,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: onRetryRates,
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: const Text(
+                              'Reintentar',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
           ),
         ],
       ),

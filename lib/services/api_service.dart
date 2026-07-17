@@ -75,18 +75,33 @@ class ApiService {
   }
 
   Future<double> fetchBcvRate() async {
-    final res = await http.get(Uri.parse(ApiConfig.taxesObtener));
-    if (res.statusCode >= 400) throw Exception('Error tasa BCV');
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    final promedio = data['data']?['promedio'] ?? data['promedio'];
-    return (promedio as num?)?.toDouble() ?? 0;
+    try {
+      final res = await http
+          .get(Uri.parse(ApiConfig.taxesObtener))
+          .timeout(const Duration(seconds: 20));
+      if (res.statusCode >= 400) throw Exception('Error tasa BCV');
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      final raw = data['data'] is Map
+          ? (data['data'] as Map)['promedio']
+          : data['promedio'];
+      if (raw is num) return raw.toDouble();
+      return double.tryParse('$raw') ?? 0;
+    } on TimeoutException {
+      throw Exception('Tiempo agotado al cargar la tasa BCV');
+    }
   }
 
   Future<Map<String, dynamic>> fetchDeliveryCost() async {
-    final res = await http.get(Uri.parse(ApiConfig.deliveryCost));
-    if (res.statusCode >= 400) return {};
-    final data = jsonDecode(res.body) as Map<String, dynamic>;
-    return Map<String, dynamic>.from(data['data'] ?? data);
+    try {
+      final res = await http
+          .get(Uri.parse(ApiConfig.deliveryCost))
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode >= 400) return {};
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      return Map<String, dynamic>.from(data['data'] ?? data);
+    } catch (_) {
+      return {};
+    }
   }
 
   MediaType _imageContentType(String filename) {
