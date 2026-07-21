@@ -570,10 +570,19 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
     }
 
     final products = app.bestSellers;
+    final wide = MediaQuery.sizeOf(context).width >= 768;
+    // Móvil: 2x2 (4 tarjetas visibles). Tablet/desktop: 4x2 (8).
+    final cols = wide ? 4 : 2;
+    final rows = 2;
+    final perPage = cols * rows;
+    final aspect = wide ? 0.85 : 0.72;
+    const gridPad = 12.0;
+    const gridGap = 10.0;
+
     final pages = <List<Product>>[];
-    for (var i = 0; i < products.length; i += 8) {
+    for (var i = 0; i < products.length; i += perPage) {
       pages.add(
-        products.sublist(i, (i + 8).clamp(0, products.length)),
+        products.sublist(i, (i + perPage).clamp(0, products.length)),
       );
     }
 
@@ -582,10 +591,6 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
         if (mounted) _restartAuto(pages.length);
       });
     }
-
-    final wide = MediaQuery.sizeOf(context).width >= 768;
-    final cols = wide ? 4 : 2;
-    final pageHeight = wide ? 360.0 : 320.0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
@@ -616,41 +621,54 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
             borderRadius: BorderRadius.circular(AppColors.radiusLg),
             child: Column(
               children: [
-                SizedBox(
-                  height: pageHeight,
-                  child: PageView.builder(
-                    controller: _pageController,
-                    itemCount: pages.length,
-                    onPageChanged: (i) => setState(() => _page = i),
-                    itemBuilder: (_, pageIndex) {
-                      final slide = pages[pageIndex];
-                      return Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: GridView.builder(
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: cols,
-                            mainAxisSpacing: 10,
-                            crossAxisSpacing: 10,
-                            childAspectRatio: wide ? 0.85 : 0.78,
-                          ),
-                          itemCount: 8,
-                          itemBuilder: (_, i) {
-                            if (i >= slide.length) {
-                              return const _BestSellerPlaceholder();
-                            }
-                            return _BestSellerTile(
-                              product: slide[i],
-                              onTap: () {
-                                app.openProductInCatalog(slide[i]);
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final usable =
+                        constraints.maxWidth - gridPad * 2;
+                    final cellW =
+                        (usable - gridGap * (cols - 1)) / cols;
+                    final cellH = cellW / aspect;
+                    final pageHeight = gridPad * 2 +
+                        rows * cellH +
+                        gridGap * (rows - 1);
+                    return SizedBox(
+                      height: pageHeight,
+                      child: PageView.builder(
+                        controller: _pageController,
+                        itemCount: pages.length,
+                        onPageChanged: (i) => setState(() => _page = i),
+                        itemBuilder: (_, pageIndex) {
+                          final slide = pages[pageIndex];
+                          return Padding(
+                            padding: const EdgeInsets.all(gridPad),
+                            child: GridView.builder(
+                              physics:
+                                  const NeverScrollableScrollPhysics(),
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: cols,
+                                mainAxisSpacing: gridGap,
+                                crossAxisSpacing: gridGap,
+                                childAspectRatio: aspect,
+                              ),
+                              itemCount: perPage,
+                              itemBuilder: (_, i) {
+                                if (i >= slide.length) {
+                                  return const _BestSellerPlaceholder();
+                                }
+                                return _BestSellerTile(
+                                  product: slide[i],
+                                  onTap: () {
+                                    app.openProductInCatalog(slide[i]);
+                                  },
+                                );
                               },
-                            );
-                          },
-                        ),
-                      );
-                    },
-                  ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
                 if (pages.length > 1)
                   Padding(
