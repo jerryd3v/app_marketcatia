@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -75,6 +76,8 @@ class _LoginScreenState extends State<LoginScreen>
       } else {
         setState(() => error = 'Usuario sin perfil en Firestore');
       }
+    } on FirebaseAuthException catch (e) {
+      setState(() => error = _authError(e));
     } catch (e) {
       setState(() => error = 'Error al iniciar sesión');
     } finally {
@@ -107,17 +110,40 @@ class _LoginScreenState extends State<LoginScreen>
         'apellido': apellido.text.trim(),
         'telefono': telefono.text.trim(),
         'documento': '$tipoDoc${documento.text.trim()}',
-        'locations': [],
+        'locations': <dynamic>[],
         'sessions': 1,
-        'createdAt': Timestamp.now(),
       };
-      await app.firebase.createUserDoc(uid, data);
+      await app.firebase.createUserDoc(uid, {
+        ...data,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       app.setUser(AppUser.fromJson(data));
       if (mounted) context.go('/');
+    } on FirebaseAuthException catch (e) {
+      setState(() => error = _authError(e));
     } catch (e) {
       setState(() => error = 'Error al registrarse');
     } finally {
       if (mounted) setState(() => loading = false);
+    }
+  }
+
+  String _authError(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'Ese correo ya tiene cuenta. Inicia sesión.';
+      case 'invalid-email':
+        return 'Correo no válido.';
+      case 'weak-password':
+        return 'La contraseña es muy débil (mín. 6 caracteres).';
+      case 'wrong-password':
+      case 'invalid-credential':
+      case 'user-not-found':
+        return 'Correo o contraseña incorrectos.';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Espera un momento.';
+      default:
+        return e.message ?? 'Error de autenticación (${e.code})';
     }
   }
 

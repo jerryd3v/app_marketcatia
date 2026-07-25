@@ -352,7 +352,6 @@ class AppUser {
   }
 
   Map<String, dynamic> toJson() => {
-        ...raw,
         'uid': uid,
         'email': email,
         'nombre': nombre,

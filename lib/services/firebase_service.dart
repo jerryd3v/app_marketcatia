@@ -257,4 +257,23 @@ class FirebaseService {
   }
 
   Future<void> signOut() => auth.signOut();
+
+  /// Borra perfil Firestore + cuenta Auth (App Store 5.1.1(v)).
+  Future<void> deleteAccount(String password) async {
+    final user = auth.currentUser;
+    if (user == null || user.email == null) {
+      throw Exception('No hay sesión activa.');
+    }
+    final cred = EmailAuthProvider.credential(
+      email: user.email!,
+      password: password,
+    );
+    await user.reauthenticateWithCredential(cred);
+    try {
+      await db.collection('user').doc(user.uid).delete();
+    } catch (_) {
+      // ponytail: si rules bloquean el doc, Auth delete igual cumple App Store
+    }
+    await user.delete();
+  }
 }

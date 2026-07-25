@@ -271,8 +271,89 @@ class _AccountScreenState extends State<AccountScreen> {
               label: const Text('Cerrar sesión', style: TextStyle(color: AppColors.discount)),
             ),
           ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: _confirmDeleteAccount,
+              child: const Text(
+                'Eliminar cuenta',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final passwordCtrl = TextEditingController();
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Eliminar cuenta'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Se eliminará tu cuenta y los datos de perfil asociados. Esta acción no se puede deshacer.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Confirma tu contraseña',
+                ),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      final password = passwordCtrl.text;
+      if (password.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ingresa tu contraseña para continuar.')),
+        );
+        return;
+      }
+      final messenger = ScaffoldMessenger.of(context);
+      final app = context.read<AppProvider>();
+      try {
+        await app.deleteAccount(password);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Cuenta eliminada.')),
+        );
+        context.go('/login');
+      } catch (e) {
+        if (!mounted) return;
+        final msg = e.toString().contains('wrong-password') ||
+                e.toString().contains('invalid-credential')
+            ? 'Contraseña incorrecta.'
+            : 'No se pudo eliminar la cuenta. Intenta de nuevo.';
+        messenger.showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } finally {
+      // ponytail: dispose tras un frame — TextField aún cuelga del controller al cerrar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        passwordCtrl.dispose();
+      });
+    }
   }
 }

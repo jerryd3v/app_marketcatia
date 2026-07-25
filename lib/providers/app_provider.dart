@@ -662,6 +662,15 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteAccount(String password) async {
+    await _firebase.deleteAccount(password);
+    user = null;
+    carrito = [];
+    await _persistUser();
+    await _persistCart();
+    notifyListeners();
+  }
+
   void setProductoIdParaScroll(String? id) {
     productoIdParaScroll = id;
     notifyListeners();
