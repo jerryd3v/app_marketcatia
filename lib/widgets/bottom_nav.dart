@@ -6,7 +6,7 @@ import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import 'app_scaffold.dart';
 
-/// Barra inferior: ~51px (+15%) + poco aire sobre el home indicator.
+/// Barra inferior: ~52px (+17%) + poco aire sobre el home indicator.
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key});
 
@@ -25,7 +25,7 @@ class BottomNav extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomPad),
         child: SizedBox(
-          height: 51,
+          height: 52,
           child: Row(
             children: [
               _NavItem(
@@ -96,14 +96,14 @@ class _NavItem extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  size: 23,
+                  size: 24,
                   color: active ? AppColors.primary : AppColors.textLight,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 10.7,
                     fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                     color: active ? AppColors.primary : AppColors.textLight,
                     height: 1,
@@ -115,7 +115,7 @@ class _NavItem extends StatelessWidget {
               Positioned(
                 top: 2,
                 child: Container(
-                  width: 18,
+                  width: 19,
                   height: 2.5,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
@@ -128,8 +128,8 @@ class _NavItem extends StatelessWidget {
                 top: 2,
                 right: 18,
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 16),
-                  height: 16,
+                  constraints: const BoxConstraints(minWidth: 17),
+                  height: 17,
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -141,7 +141,7 @@ class _NavItem extends StatelessWidget {
                     '$badge',
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 9,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w700,
                       height: 1,
                     ),
