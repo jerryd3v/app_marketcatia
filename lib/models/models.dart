@@ -316,6 +316,13 @@ class Branch {
         name: (m['name'] ?? m['nombre'] ?? '').toString(),
         raw: m,
       );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is Branch && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
 class AppUser {

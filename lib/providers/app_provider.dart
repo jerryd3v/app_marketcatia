@@ -255,18 +255,28 @@ class AppProvider extends ChangeNotifier {
     cargandoSedes = true;
     notifyListeners();
     try {
-      sedes = await _firebase.fetchBranches();
-      if (_pendingSedeId != null) {
+      final fetched = await _firebase.fetchBranches();
+      // Deduplicar por id: DropdownButton exige value único en items.
+      final byId = <String, Branch>{};
+      for (final b in fetched) {
+        byId.putIfAbsent(b.id, () => b);
+      }
+      sedes = byId.values.toList();
+      final wantId = _pendingSedeId ?? sedeSeleccionada?.id;
+      _pendingSedeId = null;
+      if (wantId != null) {
         sedeSeleccionada = sedes.cast<Branch?>().firstWhere(
-              (b) => b?.id == _pendingSedeId,
+              (b) => b?.id == wantId,
               orElse: () => sedes.isNotEmpty ? sedes.first : null,
             );
-        _pendingSedeId = null;
-      } else if (sedeSeleccionada == null && sedes.isNotEmpty) {
+      } else if (sedes.isNotEmpty) {
         sedeSeleccionada = sedes.first;
+      } else {
+        sedeSeleccionada = null;
       }
     } catch (_) {
       sedes = [];
+      sedeSeleccionada = null;
     } finally {
       cargandoSedes = false;
       notifyListeners();
