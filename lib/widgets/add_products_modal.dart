@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../config/content_policy.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../services/api_service.dart';
@@ -62,8 +63,10 @@ class _AddProductsModalState extends State<AddProductsModal> {
       _products = [];
     });
     try {
-      final list = await _api.reportProducts(
-        name: (name == null || name.isEmpty) ? null : name,
+      final list = filterProductsForPlatform(
+        await _api.reportProducts(
+          name: (name == null || name.isEmpty) ? null : name,
+        ),
       );
       if (!mounted || gen != _requestGen) return;
       setState(() {

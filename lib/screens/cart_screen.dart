@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -19,6 +20,19 @@ import '../utils/delivery_cost.dart';
 import '../utils/pricing.dart';
 import '../widgets/add_products_modal.dart';
 import '../widgets/delivery_map_section.dart';
+
+/// Origen de la orden (mismo campo `plataform` que usa la web).
+String _orderPlatformLabel() {
+  if (kIsWeb) return 'WEB';
+  switch (defaultTargetPlatform) {
+    case TargetPlatform.iOS:
+      return 'App Iphone';
+    case TargetPlatform.android:
+      return 'App android';
+    default:
+      return 'APP';
+  }
+}
 
 class CartScreen extends StatefulWidget {
   const CartScreen({
@@ -291,6 +305,15 @@ class _CartScreenState extends State<CartScreen> {
       final fecha =
           '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year}';
 
+      // Alineado con web: snapshot Cashea + delivery al emitir.
+      final desgloseMontos = <String, dynamic>{};
+      if (_isCashea) {
+        desgloseMontos['monto_cashea'] = _subtotal;
+      }
+      if (deliveryType == 'delivery' && _deliveryFee > 0) {
+        desgloseMontos['monto_delivery'] = _deliveryFee;
+      }
+
       final orderData = <String, dynamic>{
         // Campos alineados con la web (impresora / admin / Mis pedidos)
         'fecha': fecha,
@@ -316,7 +339,7 @@ class _CartScreenState extends State<CartScreen> {
         'impreso': false,
         'checkOrder': 'noVerificado',
         'type': 'order',
-        'plataform': 'APP',
+        'plataform': _orderPlatformLabel(),
         'delivery_type': deliveryType,
         if (deliveryType == 'delivery') 'checkDelivery': 'Pendiente',
         'delivery_address': _deliveryAddress,
@@ -335,6 +358,7 @@ class _CartScreenState extends State<CartScreen> {
             'name': sede.name,
           },
         if (_bcvRate > 0) 'tasa_dolar': double.parse(_bcvRate.toStringAsFixed(4)),
+        if (desgloseMontos.isNotEmpty) 'desglose_montos': desgloseMontos,
         // Compat app
         'items': productos,
         'subtotal': _subtotal,

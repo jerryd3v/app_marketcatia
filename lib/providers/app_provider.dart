@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/content_policy.dart';
 import '../constants/cart_payment_modality.dart';
 import '../models/campaign_product.dart';
 import '../models/models.dart';
@@ -127,6 +128,7 @@ class AppProvider extends ChangeNotifier {
             .whereType<Map>()
             .map((e) => CartItem.fromJson(Map<String, dynamic>.from(e)))
             .toList();
+        carrito = filterCartForPlatform(carrito);
         cartPaymentModality = CartPaymentModality.parse(
           prefs.getString(_modalityKey),
         );
@@ -178,7 +180,9 @@ class AppProvider extends ChangeNotifier {
     cargandoCategorias = true;
     notifyListeners();
     try {
-      categorias = await _firebase.fetchCategories();
+      categorias = filterCategoriesForPlatform(
+        await _firebase.fetchCategories(),
+      );
       // Ofertas necesitan categorías para etiquetas; re-resuelve si ya hay campaña.
       if (activeDailyOffer != null) {
         unawaited(_loadDailyOffers());
@@ -305,11 +309,13 @@ class AppProvider extends ChangeNotifier {
       if (offer == null) {
         dailyOfferProducts = [];
       } else {
-        dailyOfferProducts = await _promo.resolveCampaignProducts(
-          offer,
-          modo: modo,
-          categorias: categorias,
-          promoSource: 'daily_offer',
+        dailyOfferProducts = filterCampaignProductsForPlatform(
+          await _promo.resolveCampaignProducts(
+            offer,
+            modo: modo,
+            categorias: categorias,
+            promoSource: 'daily_offer',
+          ),
         );
       }
     } catch (_) {
@@ -325,7 +331,9 @@ class AppProvider extends ChangeNotifier {
     cargandoMasVendidos = true;
     notifyListeners();
     try {
-      bestSellers = await _firebase.fetchBestSellers();
+      bestSellers = filterProductsForPlatform(
+        await _firebase.fetchBestSellers(),
+      );
     } catch (_) {
       bestSellers = [];
     } finally {
@@ -400,7 +408,9 @@ class AppProvider extends ChangeNotifier {
     cargandoProductos = true;
     notifyListeners();
     try {
-      productosSubcategoria = await _api.productsBySubcategory(subId);
+      productosSubcategoria = filterProductsForPlatform(
+        await _api.productsBySubcategory(subId),
+      );
     } catch (_) {
       productosSubcategoria = [];
     } finally {
@@ -447,7 +457,9 @@ class AppProvider extends ChangeNotifier {
     buscando = true;
     notifyListeners();
     try {
-      resultadosBusqueda = await _api.searchProducts(term);
+      resultadosBusqueda = filterProductsForPlatform(
+        await _api.searchProducts(term),
+      );
     } catch (_) {
       resultadosBusqueda = [];
     } finally {
@@ -510,6 +522,8 @@ class AppProvider extends ChangeNotifier {
     String? presentacion,
     int cantidad = 1,
   }) async {
+    // App Store 1.4.3: no vender tabaco en iOS.
+    if (hideTobaccoOnThisPlatform && isTobaccoProduct(product)) return;
     if (!isStockAllowedForAddToCart(product.stock)) return;
     final pres = presentacion ?? _defaultPresentacion(product);
     if (!isPresentationAllowedByStock(
@@ -573,6 +587,9 @@ class AppProvider extends ChangeNotifier {
     String presentacion, {
     int cantidad = 1,
   }) async {
+    if (hideTobaccoOnThisPlatform && isTobaccoProduct(product)) {
+      return 'Este producto no está disponible en la app.';
+    }
     if (presentacion.isEmpty) {
       return 'Seleccione una presentación';
     }

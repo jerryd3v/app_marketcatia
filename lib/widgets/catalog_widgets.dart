@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +10,9 @@ import '../theme/app_colors.dart';
 import '../utils/pricing.dart';
 
 final _priceFmt = NumberFormat('#,##0.00', 'es');
+
+bool get _compactProductCards =>
+    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
 
 class ProductCard extends StatefulWidget {
   const ProductCard({super.key, required this.product});
@@ -141,9 +145,9 @@ class _ProductCardState extends State<ProductCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // .product-image web ≈ 120px en móvil
+          // .product-image web ≈ 120px; iOS más bajo para que la celda no sobre
           SizedBox(
-            height: 110,
+            height: _compactProductCards ? 80 : 110,
             child: Stack(
               children: [
                 Container(
@@ -155,7 +159,7 @@ class _ProductCardState extends State<ProductCard> {
                       colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
                     ),
                   ),
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(_compactProductCards ? 6 : 12),
                   child: product.displayImage.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: product.displayImage,
@@ -201,24 +205,27 @@ class _ProductCardState extends State<ProductCard> {
               ],
             ),
           ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          // iOS: sin Expanded/Spacer — el alto lo marca mainAxisExtent del grid.
+          // Android: Expanded + Spacer como antes.
+          if (_compactProductCards)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     product.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 14, // 0.875rem web
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: AppColors.textDark,
-                      height: 1.3,
+                      height: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 4),
                   if (isWholesale && options.isNotEmpty)
                     _PresentationSelector(
                       options: options,
@@ -227,15 +234,15 @@ class _ProductCardState extends State<ProductCard> {
                       isCashea: app.isCashea,
                     )
                   else
-                    Text(
+                    const Text(
                       'Precio unitario',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 12,
                         fontWeight: FontWeight.w500,
                         color: AppColors.retail,
                       ),
                     ),
-                  const Spacer(),
+                  const SizedBox(height: 4),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -247,7 +254,7 @@ class _ProductCardState extends State<ProductCard> {
                                   Text(
                                     '\$${_priceFmt.format(strike)}',
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 12,
                                       color: AppColors.textLight,
                                       decoration: TextDecoration.lineThrough,
                                     ),
@@ -255,7 +262,7 @@ class _ProductCardState extends State<ProductCard> {
                                   Text(
                                     '\$${_priceFmt.format(display)}',
                                     style: const TextStyle(
-                                      fontSize: 16,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                       color: AppColors.discount,
                                     ),
@@ -265,7 +272,7 @@ class _ProductCardState extends State<ProductCard> {
                             : Text(
                                 '\$${_priceFmt.format(display)}',
                                 style: const TextStyle(
-                                  fontSize: 16, // 1rem web
+                                  fontSize: 15,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.primary,
                                 ),
@@ -284,8 +291,93 @@ class _ProductCardState extends State<ProductCard> {
                   ),
                 ],
               ),
+            )
+          else
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textDark,
+                        height: 1.3,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (isWholesale && options.isNotEmpty)
+                      _PresentationSelector(
+                        options: options,
+                        selected: _selectedPres,
+                        onSelect: (k) => setState(() => _selectedPres = k),
+                        isCashea: app.isCashea,
+                      )
+                    else
+                      const Text(
+                        'Precio unitario',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.retail,
+                        ),
+                      ),
+                    const Spacer(),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: discount > 0 && strike != null
+                              ? Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '\$${_priceFmt.format(strike)}',
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.textLight,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                    Text(
+                                      '\$${_priceFmt.format(display)}',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.discount,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  '\$${_priceFmt.format(display)}',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                        ),
+                        _AddBtn(
+                          inCart: inCart,
+                          canAdd: canAdd,
+                          onAdd: () => app.agregarProductoAlCarritoCompleto(
+                            product,
+                            presentacion:
+                                isWholesale ? _selectedPres : 'Unidad',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -492,15 +584,23 @@ class ProductGrid extends StatelessWidget {
         ),
       );
     }
+    final isWholesale = context.watch<AppProvider>().isWholesale;
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        // Proporción web: tarjeta más alta, tipografía legible
-        childAspectRatio: 0.58,
-      ),
+      gridDelegate: _compactProductCards
+          ? SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              // Minorista ~200; Mayorista necesita chips Unid/Mayor/Bulto.
+              mainAxisExtent: isWholesale ? 248 : 200,
+            )
+          : const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 0.58,
+            ),
       itemCount: products.length,
       itemBuilder: (_, i) => ProductCard(product: products[i]),
     );

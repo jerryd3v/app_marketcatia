@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -6,9 +7,20 @@ import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import 'app_scaffold.dart';
 
-/// Barra inferior: ~52px (+17%) + poco aire sobre el home indicator.
+/// Barra inferior: base ~52px (+17%); en Android +16% extra.
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key});
+
+  static bool get _android =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  // Base (+17%). Android: ×1.16.
+  static double get _barH => _android ? 60.3 : 52;
+  static double get _iconSize => _android ? 27.8 : 24;
+  static double get _labelSize => _android ? 12.4 : 10.7;
+  static double get _iconGap => _android ? 2.3 : 2;
+  static double get _badgeSize => _android ? 19.7 : 17;
+  static double get _badgeFont => _android ? 11 : 9.5;
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +37,7 @@ class BottomNav extends StatelessWidget {
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomPad),
         child: SizedBox(
-          height: 52,
+          height: _barH,
           child: Row(
             children: [
               _NavItem(
@@ -96,14 +108,14 @@ class _NavItem extends StatelessWidget {
               children: [
                 Icon(
                   icon,
-                  size: 24,
+                  size: BottomNav._iconSize,
                   color: active ? AppColors.primary : AppColors.textLight,
                 ),
-                const SizedBox(height: 2),
+                SizedBox(height: BottomNav._iconGap),
                 Text(
                   label,
                   style: TextStyle(
-                    fontSize: 10.7,
+                    fontSize: BottomNav._labelSize,
                     fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                     color: active ? AppColors.primary : AppColors.textLight,
                     height: 1,
@@ -115,8 +127,8 @@ class _NavItem extends StatelessWidget {
               Positioned(
                 top: 2,
                 child: Container(
-                  width: 19,
-                  height: 2.5,
+                  width: BottomNav._android ? 22 : 19,
+                  height: BottomNav._android ? 2.9 : 2.5,
                   decoration: BoxDecoration(
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(1),
@@ -126,10 +138,10 @@ class _NavItem extends StatelessWidget {
             if (badge > 0)
               Positioned(
                 top: 2,
-                right: 18,
+                right: BottomNav._android ? 16 : 18,
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 17),
-                  height: 17,
+                  constraints: BoxConstraints(minWidth: BottomNav._badgeSize),
+                  height: BottomNav._badgeSize,
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -139,9 +151,9 @@ class _NavItem extends StatelessWidget {
                   ),
                   child: Text(
                     '$badge',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: Colors.white,
-                      fontSize: 9.5,
+                      fontSize: BottomNav._badgeFont,
                       fontWeight: FontWeight.w700,
                       height: 1,
                     ),

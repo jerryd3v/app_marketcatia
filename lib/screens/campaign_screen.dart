@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../config/content_policy.dart';
 import '../models/campaign_product.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
@@ -75,11 +76,13 @@ class _CampaignScreenState extends State<CampaignScreen> {
         };
       }
 
-      final products = await app.promo.resolveCampaignProducts(
-        campaign,
-        modo: app.modo,
-        categorias: app.categorias,
-        promoSource: widget.isDailyOffers ? 'daily_offer' : 'banner',
+      final products = filterCampaignProductsForPlatform(
+        await app.promo.resolveCampaignProducts(
+          campaign,
+          modo: app.modo,
+          categorias: app.categorias,
+          promoSource: widget.isDailyOffers ? 'daily_offer' : 'banner',
+        ),
       );
 
       if (!mounted) return;
