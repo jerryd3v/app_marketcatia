@@ -752,12 +752,18 @@ class SubcategoryList extends StatelessWidget {
                       sub['name'] ??
                       'Subcategoría')
                   .toString();
+              // Igual que la web: emoji en `icon` (fallback 📦).
+              final icon = (sub['icon'] ?? '📦').toString().trim();
               return ListTile(
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppColors.radiusMd),
                   side: const BorderSide(color: AppColors.border),
                 ),
                 tileColor: AppColors.cardBg,
+                leading: Text(
+                  icon.isEmpty ? '📦' : icon,
+                  style: const TextStyle(fontSize: 22, height: 1),
+                ),
                 title: Text(
                   name,
                   style: const TextStyle(fontWeight: FontWeight.w600),

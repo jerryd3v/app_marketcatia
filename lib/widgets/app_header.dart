@@ -45,7 +45,7 @@ class AppHeader extends StatelessWidget {
                         },
                         child: Image.asset(
                           'assets/images/icon.png',
-                          height: 32,
+                          height: 60,
                           errorBuilder: (_, __, ___) => const Text(
                             'Marketcatia',
                             style: TextStyle(
