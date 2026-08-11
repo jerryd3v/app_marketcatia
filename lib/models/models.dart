@@ -304,6 +304,36 @@ class CategoryItem {
   }
 }
 
+class ProductBrand {
+  ProductBrand({
+    required this.id,
+    required this.key,
+    required this.name,
+    this.color = '#1e3a5f',
+    this.imageId,
+    this.imgUrl,
+  });
+
+  final String id;
+  final String key;
+  final String name;
+  final String color;
+  final String? imageId;
+  final String? imgUrl;
+
+  factory ProductBrand.fromMap(String docId, Map<String, dynamic> m, {String? imgUrl}) {
+    final key = (m['key'] ?? docId).toString();
+    return ProductBrand(
+      id: docId,
+      key: key,
+      name: (m['name'] ?? '').toString(),
+      color: (m['color'] ?? '#1e3a5f').toString(),
+      imageId: m['imageId']?.toString(),
+      imgUrl: imgUrl,
+    );
+  }
+}
+
 class Branch {
   Branch({required this.id, required this.name, this.raw = const {}});
 

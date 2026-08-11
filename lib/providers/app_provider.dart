@@ -60,6 +60,9 @@ class AppProvider extends ChangeNotifier {
   List<CampaignProductView> dailyOfferProducts = [];
   bool cargandoOfertas = false;
   List<Product> bestSellers = [];
+  List<ProductBrand> productBrands = [];
+  bool productBrandsHomeEnabled = true;
+  bool cargandoMarcas = false;
 
   bool loadingInit = false;
   bool cargandoCategorias = false;
@@ -103,6 +106,7 @@ class AppProvider extends ChangeNotifier {
           loadBanners(),
           loadDailyOffers(),
           loadBestSellers(),
+          loadProductBrands(),
         ]);
         final fbUser = _firebase.auth.currentUser;
         if (fbUser != null && user == null) {
@@ -175,6 +179,27 @@ class AppProvider extends ChangeNotifier {
   Future<void> loadBanners() => _loadBanners();
   Future<void> loadDailyOffers() => _loadDailyOffers();
   Future<void> loadBestSellers() => _loadBestSellers();
+  Future<void> loadProductBrands() => _loadProductBrands();
+
+  Future<void> _loadProductBrands() async {
+    cargandoMarcas = true;
+    notifyListeners();
+    try {
+      productBrandsHomeEnabled =
+          await _firebase.fetchProductBrandsHomeEnabled();
+      if (!productBrandsHomeEnabled) {
+        productBrands = [];
+      } else {
+        productBrands = await _firebase.fetchProductBrands();
+      }
+    } catch (_) {
+      productBrands = [];
+      productBrandsHomeEnabled = true;
+    } finally {
+      cargandoMarcas = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> _loadCategories() async {
     cargandoCategorias = true;
@@ -331,9 +356,8 @@ class AppProvider extends ChangeNotifier {
     cargandoMasVendidos = true;
     notifyListeners();
     try {
-      bestSellers = filterProductsForPlatform(
-        await _firebase.fetchBestSellers(),
-      );
+      // Ya filtrado (tabaco iOS) dentro de fetchBestSellers antes del take.
+      bestSellers = await _firebase.fetchBestSellers();
     } catch (_) {
       bestSellers = [];
     } finally {
@@ -403,6 +427,36 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Click en pasarela de marcas (igual web: `seleccionarProductBrand`).
+  Future<void> openProductBrand(ProductBrand marca) async {
+    final brandKey = marca.key.isNotEmpty ? marca.key : marca.id;
+    if (brandKey.isEmpty) return;
+    categoriaSeleccionada = null;
+    busqueda = '';
+    resultadosBusqueda = [];
+    subcategoriaSeleccionada = {
+      'id': 'product_brand_$brandKey',
+      'nombre': marca.name.isNotEmpty ? marca.name : 'Marca',
+      'icon': '🏷️',
+      'fromProductBrand': true,
+      'brandKey': brandKey,
+    };
+    vistaActual = 'products';
+    cargandoProductos = true;
+    productosSubcategoria = [];
+    notifyListeners();
+    try {
+      productosSubcategoria = filterProductsForPlatform(
+        await _api.productsByProductBrand(brandKey),
+      );
+    } catch (_) {
+      productosSubcategoria = [];
+    } finally {
+      cargandoProductos = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _loadProductsForSubcategory(String subId) async {
     if (subId.isEmpty) return;
     cargandoProductos = true;
@@ -420,6 +474,11 @@ class AppProvider extends ChangeNotifier {
   }
 
   void backToSubcategories() {
+    final fromBrand = subcategoriaSeleccionada?['fromProductBrand'] == true;
+    if (fromBrand) {
+      resetHomeState();
+      return;
+    }
     if (vistaActual == 'products' &&
         categoriaSeleccionada != null &&
         categoriaSeleccionada!.subCategories.isNotEmpty) {

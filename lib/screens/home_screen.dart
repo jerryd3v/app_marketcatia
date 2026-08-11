@@ -92,7 +92,8 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Home: banner → categorías → ofertas → más vendidos (como web)
+    // Home: marcas → banner → categorías → ofertas → más vendidos
+    // Marcas arriba del banner para no dejar hueco blanco bajo el buscador.
     return RefreshIndicator(
       onRefresh: () async {
         await Future.wait([
@@ -101,10 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
           app.loadBanners(),
           app.loadDailyOffers(),
           app.loadSedes(),
+          app.loadProductBrands(),
         ]);
       },
       child: ListView(
         controller: _scrollController,
+        // Evita el padding top del safe area (el header ya lo aplica):
+        // si no, queda un hueco blanco bajo el buscador.
+        padding: EdgeInsets.zero,
         children: [
           if (!app.firebaseReady)
             Container(
@@ -120,6 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontSize: 12, color: AppColors.textMedium),
               ),
             ),
+          const BrandsSlider(),
           AdBannerCarousel(onScrollToOffers: _scrollToOffers),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 0),

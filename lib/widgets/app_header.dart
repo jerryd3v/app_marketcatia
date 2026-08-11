@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import 'music_player_bar.dart';
 import 'orders_history_modal.dart';
 
 class AppHeader extends StatelessWidget {
@@ -28,9 +29,12 @@ class AppHeader extends StatelessWidget {
             builder: (context, app, _) {
               return Column(
                 children: [
+                  // Como la web (header-top): sede + música arriba.
                   Row(
                     children: [
                       Expanded(child: _BranchSelector(app: app)),
+                      const SizedBox(width: 8),
+                      const MusicPlayerBar(),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -45,12 +49,12 @@ class AppHeader extends StatelessWidget {
                         },
                         child: Image.asset(
                           'assets/images/icon.png',
-                          height: 60,
+                          height: 48,
                           errorBuilder: (_, __, ___) => const Text(
                             'Marketcatia',
                             style: TextStyle(
                               fontWeight: FontWeight.w800,
-                              fontSize: 20,
+                              fontSize: 18,
                               color: AppColors.textDark,
                             ),
                           ),

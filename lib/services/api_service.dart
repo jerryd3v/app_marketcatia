@@ -42,6 +42,28 @@ class ApiService {
     String subCategoryId, {
     int limit = 100,
   }) async {
+    return _reportProductsPaged(
+      body: {'show': true, 'sub_category': subCategoryId},
+      limit: limit,
+    );
+  }
+
+  /// Productos por marca (`idProductBrand`), igual que la web.
+  Future<List<Product>> productsByProductBrand(
+    String idProductBrand, {
+    int limit = 100,
+  }) async {
+    if (idProductBrand.isEmpty) return [];
+    return _reportProductsPaged(
+      body: {'show': true, 'idProductBrand': idProductBrand},
+      limit: limit,
+    );
+  }
+
+  Future<List<Product>> _reportProductsPaged({
+    required Map<String, dynamic> body,
+    int limit = 100,
+  }) async {
     final accumulated = <Product>[];
     final seen = <String>{};
     var page = 1;
@@ -52,7 +74,7 @@ class ApiService {
       final res = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'show': true, 'sub_category': subCategoryId}),
+        body: jsonEncode(body),
       );
       if (res.statusCode >= 400) {
         throw Exception('Error productos: ${res.statusCode}');

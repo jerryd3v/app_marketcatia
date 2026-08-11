@@ -62,7 +62,7 @@ class _SearchField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.cardBg,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: MarketSearchBar(
         focusNode: app.searchFocusNode,
         onChanged: app.setBusqueda,

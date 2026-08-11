@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import '../config/content_policy.dart';
 import '../models/models.dart';
 import '../models/payment_store_settings.dart';
 
@@ -47,6 +48,54 @@ class FirebaseService {
         .toList();
   }
 
+  /// Default true si no existe el doc (igual que la web).
+  Future<bool> fetchProductBrandsHomeEnabled() async {
+    try {
+      final doc = await db.collection('app_settings').doc('product_brands_home').get();
+      if (!doc.exists) return true;
+      return doc.data()?['enabled'] != false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<List<ProductBrand>> fetchProductBrands() async {
+    final snap = await db.collection('product_brand').get();
+    final marcas = <ProductBrand>[];
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      String? imgUrl;
+      final imageId = data['imageId']?.toString();
+      if (imageId != null && imageId.isNotEmpty) {
+        try {
+          imgUrl = await storage
+              .ref('images/icons/product_brand/${imageId}_100x100.png')
+              .getDownloadURL();
+        } catch (_) {
+          try {
+            imgUrl = await storage
+                .ref('images/icons/product_brand/$imageId.png')
+                .getDownloadURL();
+          } catch (_) {}
+        }
+      }
+      marcas.add(ProductBrand.fromMap(doc.id, data, imgUrl: imgUrl));
+    }
+    marcas.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return marcas;
+  }
+
+  /// Default true si no existe el doc.
+  Future<bool> fetchBackgroundMusicEnabled() async {
+    try {
+      final doc = await db.collection('app_settings').doc('background_music').get();
+      if (!doc.exists) return true;
+      return doc.data()?['enabled'] != false;
+    } catch (_) {
+      return true;
+    }
+  }
+
   Future<List<Product>> fetchBestSellers({int limit = 16}) async {
     final snap = await db
         .collection('products')
@@ -60,7 +109,8 @@ class FirebaseService {
         })
         .toList()
       ..sort((a, b) => b.ventas.compareTo(a.ventas));
-    return products.take(limit).toList();
+    // iOS: filtrar tabaco ANTES del take, si no el top-16 puede quedar vacío.
+    return filterProductsForPlatform(products).take(limit).toList();
   }
 
   Future<List<Map<String, dynamic>>> fetchPromoBanners() async {

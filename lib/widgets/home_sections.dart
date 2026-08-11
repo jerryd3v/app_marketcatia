@@ -15,6 +15,183 @@ import '../utils/pricing.dart';
 
 final _offerPriceFmt = NumberFormat('#,##0.00', 'es');
 
+Color _parseBrandColor(String raw) {
+  var hex = raw.trim().replaceFirst('#', '');
+  if (hex.length == 3) {
+    hex = hex.split('').map((c) => '$c$c').join();
+  }
+  if (hex.length == 6) hex = 'FF$hex';
+  final value = int.tryParse(hex, radix: 16);
+  if (value == null) return const Color(0xFF1E3A5F);
+  return Color(value);
+}
+
+/// Pasarela de marcas (auto-scroll), igual que BrandsSlider web.
+class BrandsSlider extends StatefulWidget {
+  const BrandsSlider({super.key});
+
+  @override
+  State<BrandsSlider> createState() => _BrandsSliderState();
+}
+
+class _BrandsSliderState extends State<BrandsSlider> {
+  final _scroll = ScrollController();
+  Timer? _auto;
+  Timer? _resume;
+  bool _paused = false;
+  bool _programmatic = false;
+
+  static const _pxPerTick = 0.55;
+  static const _tickMs = 16;
+  static const _resumeAfter = Duration(milliseconds: 2500);
+
+  @override
+  void initState() {
+    super.initState();
+    _auto = Timer.periodic(const Duration(milliseconds: _tickMs), (_) {
+      _tickAutoScroll();
+    });
+  }
+
+  @override
+  void dispose() {
+    _auto?.cancel();
+    _resume?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _tickAutoScroll() {
+    if (!mounted || _paused || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    final max = position.maxScrollExtent;
+    if (max <= 8) return;
+    final next = position.pixels + _pxPerTick;
+    _programmatic = true;
+    try {
+      _scroll.jumpTo(next >= max - 1 ? 0 : next);
+    } finally {
+      // Liberar en el siguiente microtask para ignorar notificaciones del jumpTo.
+      scheduleMicrotask(() => _programmatic = false);
+    }
+  }
+
+  void _pauseAuto() {
+    if (_programmatic) return;
+    _paused = true;
+    _resume?.cancel();
+    _resume = Timer(_resumeAfter, () {
+      if (mounted) _paused = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppProvider>();
+    if (app.cargandoMarcas ||
+        !app.productBrandsHomeEnabled ||
+        app.productBrands.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final marcas = app.productBrands;
+    final size = MediaQuery.sizeOf(context).width >= 768 ? 88.0 : 72.0;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8, bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Color(0xFFE5E7EB)),
+          bottom: BorderSide(color: Color(0xFFE5E7EB)),
+        ),
+      ),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (n) {
+          // Solo pausar por gesto del usuario, no por el auto-scroll.
+          if (_programmatic) return false;
+          if (n is UserScrollNotification) {
+            _pauseAuto();
+          } else if (n is ScrollStartNotification && n.dragDetails != null) {
+            _pauseAuto();
+          }
+          return false;
+        },
+        child: SizedBox(
+          height: size,
+          child: ListView.separated(
+            controller: _scroll,
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: marcas.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 22),
+            itemBuilder: (_, i) {
+              final marca = marcas[i];
+              final bg = _parseBrandColor(marca.color);
+              final letter = (marca.name.isNotEmpty ? marca.name[0] : '?')
+                  .toUpperCase();
+              return GestureDetector(
+                onTap: () {
+                  _pauseAuto();
+                  app.openProductBrand(marca);
+                },
+                child: SizedBox(
+                  width: size,
+                  height: size,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: bg,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: Center(
+                        child: marca.imgUrl != null && marca.imgUrl!.isNotEmpty
+                            ? Padding(
+                                padding: EdgeInsets.all(size * 0.16),
+                                child: CachedNetworkImage(
+                                  imageUrl: marca.imgUrl!,
+                                  fit: BoxFit.contain,
+                                  errorWidget: (_, _, _) => Text(
+                                    letter,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: size * 0.32,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                letter,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: size * 0.32,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class AdBannerCarousel extends StatefulWidget {
   const AdBannerCarousel({super.key, this.onScrollToOffers});
 
@@ -83,62 +260,128 @@ class _AdBannerCarouselState extends State<AdBannerCarousel> {
     final banners = context.watch<AppProvider>().banners;
     if (banners.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 168,
-          child: PageView.builder(
-            controller: _controller,
-            itemCount: banners.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (_, i) {
-              final b = banners[i];
-              final isAnnouncement = b['ctaAction'] == 'announcement';
-              if (isAnnouncement) {
-                final img = (b['backgroundImageMobileUrl'] ??
-                        b['backgroundImageUrl'] ??
-                        '')
-                    .toString();
+    final allAnnouncements =
+        banners.every((b) => b['ctaAction'] == 'announcement');
+
+    // Anuncios: altura según la imagen (como la web), sin caja blanca fija.
+    if (allAnnouncements) {
+      final b = banners[_index.clamp(0, banners.length - 1)];
+      final img = (b['backgroundImageMobileUrl'] ??
+              b['backgroundImageUrl'] ??
+              '')
+          .toString();
+      if (img.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppColors.radiusMd),
+              child: CachedNetworkImage(
+                imageUrl: img,
+                width: double.infinity,
+                fit: BoxFit.fitWidth,
+                placeholder: (_, __) => const SizedBox.shrink(),
+                errorWidget: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ),
+            if (banners.length > 1)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  banners.length,
+                  (i) => GestureDetector(
+                    onTap: () => setState(() => _index = i),
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 3,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i == _index
+                            ? AppColors.primary
+                            : AppColors.border,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 168,
+            child: PageView.builder(
+              controller: _controller,
+              itemCount: banners.length,
+              onPageChanged: (i) => setState(() => _index = i),
+              itemBuilder: (_, i) {
+                final b = banners[i];
+                if (b['ctaAction'] == 'announcement') {
+                  final img = (b['backgroundImageMobileUrl'] ??
+                          b['backgroundImageUrl'] ??
+                          '')
+                      .toString();
+                  if (img.isEmpty) return const SizedBox.shrink();
+                  return Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(AppColors.radiusMd),
+                      child: CachedNetworkImage(
+                        imageUrl: img,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                        placeholder: (_, __) => const SizedBox.shrink(),
+                        errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                      ),
+                    ),
+                  );
+                }
                 return Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(AppColors.radiusMd),
-                    child: img.isEmpty
-                        ? const ColoredBox(color: AppColors.border)
-                        : CachedNetworkImage(imageUrl: img, fit: BoxFit.cover),
+                  child: _PromoBannerSlide(
+                    banner: b,
+                    onTap: () => _executeBannerAction(context, b),
                   ),
                 );
-              }
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                child: _PromoBannerSlide(
-                  banner: b,
-                  onTap: () => _executeBannerAction(context, b),
-                ),
-              );
-            },
+              },
+            ),
           ),
-        ),
-        if (banners.length > 1)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              banners.length,
-              (i) => Container(
-                width: 7,
-                height: 7,
-                margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: i == _index
-                      ? AppColors.primary
-                      : AppColors.border,
+          if (banners.length > 1)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                banners.length,
+                (i) => Container(
+                  width: 7,
+                  height: 7,
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: i == _index
+                        ? AppColors.primary
+                        : AppColors.border,
+                  ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -564,8 +807,22 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
-    // Como la web: no mostrar spinner; ocultar hasta tener datos
-    if (app.cargandoMasVendidos || app.bestSellers.isEmpty) {
+    if (app.cargandoMasVendidos) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(12, 20, 12, 8),
+        child: SizedBox(
+          height: 120,
+          child: Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+        ),
+      );
+    }
+    if (app.bestSellers.isEmpty) {
       return const SizedBox.shrink();
     }
 
