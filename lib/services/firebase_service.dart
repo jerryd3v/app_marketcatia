@@ -7,6 +7,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import '../config/content_policy.dart';
 import '../models/models.dart';
 import '../models/payment_store_settings.dart';
+import '../utils/order_money.dart';
 
 class FirebaseService {
   FirebaseFirestore get db => FirebaseFirestore.instance;
@@ -228,7 +229,8 @@ class FirebaseService {
     required String docId,
   }) async {
     try {
-      final payload = Map<String, dynamic>.from(data);
+      // Totales siempre desde líneas; no confiar en costoTotal del caller.
+      final payload = reconcileOrderMoneyFields(Map<String, dynamic>.from(data));
       final info = Map<String, dynamic>.from(
         (payload['info'] as Map?)?.cast<String, dynamic>() ?? {},
       );

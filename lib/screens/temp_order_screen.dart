@@ -40,11 +40,14 @@ class _TempOrderScreenState extends State<TempOrderScreen> {
         });
         return;
       }
-      final items = (data['items'] as List? ?? [])
+      // API/web guardan `productos`; legado/app a veces `items`.
+      final rawLines = (data['productos'] as List?) ?? (data['items'] as List?) ?? const [];
+      final items = rawLines
           .whereType<Map>()
           .map((e) => CartItem.fromJson(Map<String, dynamic>.from(e)))
           .toList();
       _paymentModality = parsed.paymentType ??
+          CartPaymentModality.parse(data['payment_type']?.toString()) ??
           CartPaymentModality.parse(data['paymentModality']?.toString());
       _cart = syncCartLinesWithPaymentModality(items, _paymentModality);
       setState(() => _loading = false);

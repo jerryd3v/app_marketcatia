@@ -375,6 +375,7 @@ class _CartScreenState extends State<CartScreen> {
         'totalBs': _totalBs,
         'bcvRate': _bcvRate,
         'paymentModality': _modality,
+        if (_modality != null) 'payment_type': _modality,
         'comentario': _commentCtrl.text.trim(),
         'branchId': sede?.id,
         'modo': provider.modo,
