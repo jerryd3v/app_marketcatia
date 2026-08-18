@@ -5,6 +5,8 @@ import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/catalog_widgets.dart';
 import '../widgets/home_sections.dart';
+import '../widgets/spin_y_icons.dart';
+import '../widgets/store_comments.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -129,9 +131,18 @@ class _HomeScreenState extends State<HomeScreen> {
           AdBannerCarousel(onScrollToOffers: _scrollToOffers),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text(
-              'Categorías',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            child: Row(
+              children: [
+                Text(
+                  'Categorías',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                SizedBox(width: 6),
+                SpinYIcons(icon: Icons.star, count: 5, size: 16),
+              ],
             ),
           ),
           const CategoryGrid(),
@@ -139,6 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
             key: _offersKey,
             child: const DailyOffersSection(),
           ),
+          const StoreCommentsEntry(),
           const FeaturedCarousel(),
           const SizedBox(height: 24),
         ],

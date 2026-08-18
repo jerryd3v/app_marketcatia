@@ -388,6 +388,36 @@ class AppUser {
     return n.isEmpty ? (email ?? 'Usuario') : n;
   }
 
+  AppUser copyWith({
+    String? nombre,
+    String? telefono,
+    String? imageUrl,
+    List<dynamic>? locations,
+    bool clearImage = false,
+  }) {
+    return AppUser(
+      uid: uid,
+      email: email,
+      nombre: nombre ?? this.nombre,
+      apellido: apellido,
+      telefono: telefono ?? this.telefono,
+      documento: documento,
+      direccion: direccion,
+      imageUrl: clearImage ? null : (imageUrl ?? this.imageUrl),
+      locations: locations ?? this.locations,
+      raw: {
+        ...raw,
+        if (nombre != null) 'nombre': nombre,
+        if (telefono != null) 'telefono': telefono,
+        if (clearImage) ...{'imageUrl': null, 'img': null} else if (imageUrl != null) ...{
+          'imageUrl': imageUrl,
+          'img': imageUrl,
+        },
+        if (locations != null) 'locations': locations,
+      },
+    );
+  }
+
   Map<String, dynamic> toJson() => {
         'uid': uid,
         'email': email,
@@ -397,6 +427,7 @@ class AppUser {
         'documento': documento,
         'direccion': direccion,
         'imageUrl': imageUrl,
+        'img': imageUrl,
         'locations': locations,
       };
 

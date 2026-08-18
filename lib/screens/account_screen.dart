@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/geo_reference.dart';
 import '../providers/app_provider.dart';
+import '../services/api_service.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/password.dart';
+import '../utils/user_location.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -17,15 +21,34 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   final _firebase = FirebaseService();
+  final _api = ApiService();
   List<Map<String, dynamic>> _orders = [];
   bool _loadingOrders = false;
+  String _view = 'dashboard'; // dashboard | profile | password
+  bool _saving = false;
+  bool _uploadingPhoto = false;
+
+  final _nombreCtrl = TextEditingController();
+  final _telefonoCtrl = TextEditingController();
+  final _pwdCtrl = TextEditingController();
+  final _pwd2Ctrl = TextEditingController();
 
   static const _catiaLatLng = catiaReferenceLocation;
+  static const _maxPhotoBytes = 3 * 1024 * 1024;
 
   @override
   void initState() {
     super.initState();
     _loadOrders();
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _telefonoCtrl.dispose();
+    _pwdCtrl.dispose();
+    _pwd2Ctrl.dispose();
+    super.dispose();
   }
 
   Future<void> _loadOrders() async {
@@ -107,10 +130,13 @@ class _AccountScreenState extends State<AccountScreen> {
       user.locations.map((e) => Map<String, dynamic>.from(e as Map)),
     );
     locations.add({
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
       'label': labelCtrl.text.trim(),
+      'title': labelCtrl.text.trim(),
       'address': addressCtrl.text.trim(),
       'lat': _catiaLatLng.latitude,
       'lng': _catiaLatLng.longitude,
+      'isDefault': locations.isEmpty,
     });
     await _firebase.updateUserLocations(user.uid, locations);
     final updated = await _firebase.fetchUser(user.uid);
@@ -134,6 +160,161 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _setDefaultAddress(String id) async {
+    final user = context.read<AppProvider>().user;
+    if (user == null) return;
+    final next = await _firebase.setDefaultUserLocation(user.uid, id);
+    if (!mounted) return;
+    context.read<AppProvider>().setUser(
+          user.copyWith(locations: next.map((e) => e.toMap()).toList()),
+        );
+  }
+
+  void _openProfile() {
+    final user = context.read<AppProvider>().user;
+    _nombreCtrl.text = user?.nombre ?? '';
+    _telefonoCtrl.text = user?.telefono ?? '';
+    setState(() => _view = 'profile');
+  }
+
+  void _openPassword() {
+    _pwdCtrl.clear();
+    _pwd2Ctrl.clear();
+    setState(() => _view = 'password');
+  }
+
+  Future<void> _saveProfile() async {
+    final user = context.read<AppProvider>().user;
+    if (user == null) return;
+    final nombre = _nombreCtrl.text.trim();
+    final telefono = _telefonoCtrl.text.trim();
+    if (nombre.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa tu nombre.')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _firebase.updateUserProfile(
+        user.uid,
+        nombre: nombre,
+        telefono: telefono,
+      );
+      await _firebase.patchStoreCommentAuthor(user.uid, userName: nombre);
+      if (!mounted) return;
+      context.read<AppProvider>().setUser(
+            user.copyWith(nombre: nombre, telefono: telefono),
+          );
+      if (mounted) {
+        setState(() => _view = 'dashboard');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perfil actualizado')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo guardar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _savePassword() async {
+    final user = context.read<AppProvider>().user;
+    if (user == null) return;
+    final pwd = _pwdCtrl.text.trim();
+    final confirm = _pwd2Ctrl.text.trim();
+    if (pwd != confirm) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Las contraseñas no coinciden.')),
+      );
+      return;
+    }
+    final err = checkPwd(pwd);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await _api.changePassword(userId: user.uid, newPassword: pwd);
+      try {
+        await _firebase.updateUserProfile(user.uid, password: pwd);
+      } catch (_) {}
+      if (mounted) {
+        setState(() => _view = 'dashboard');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contraseña actualizada')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickPhoto() async {
+    final user = context.read<AppProvider>().user;
+    if (user == null || _uploadingPhoto) return;
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > _maxPhotoBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Imagen muy grande. Máximo 3 MB.')),
+        );
+      }
+      return;
+    }
+    setState(() => _uploadingPhoto = true);
+    try {
+      final url = await _firebase.uploadProfileImage(user.uid, bytes);
+      await _firebase.updateUserProfile(user.uid, imageUrl: url);
+      await _firebase.patchStoreCommentAuthor(user.uid, userImg: url);
+      if (!mounted) return;
+      context.read<AppProvider>().setUser(user.copyWith(imageUrl: url));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo subir: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  Future<void> _removePhoto() async {
+    final user = context.read<AppProvider>().user;
+    if (user == null) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      await _firebase.deleteProfileImage(user.uid);
+      await _firebase.updateUserProfile(user.uid, clearImage: true);
+      await _firebase.patchStoreCommentAuthor(user.uid, clearImg: true);
+      if (!mounted) return;
+      context.read<AppProvider>().setUser(user.copyWith(clearImage: true));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo quitar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AppProvider>().user;
@@ -141,7 +322,10 @@ class _AccountScreenState extends State<AccountScreen> {
       return const Center(child: Text('Inicia sesión para ver tu cuenta'));
     }
 
-    final locations = user.locations;
+    if (_view == 'profile') return _buildProfile(user.email);
+    if (_view == 'password') return _buildPassword();
+
+    final parsed = parseUserLocations(user.locations);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -194,7 +378,22 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
+          ListTile(
+            leading: const Icon(Icons.person_outline, color: AppColors.primary),
+            title: const Text('Perfil'),
+            subtitle: const Text('Edita tu información personal'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openProfile,
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock_outline, color: AppColors.primary),
+            title: const Text('Contraseña'),
+            subtitle: const Text('Cambia tu contraseña'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _openPassword,
+          ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -209,7 +408,7 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             ],
           ),
-          if (locations.isEmpty)
+          if (parsed.isEmpty)
             const Card(
               child: Padding(
                 padding: EdgeInsets.all(16),
@@ -217,13 +416,22 @@ class _AccountScreenState extends State<AccountScreen> {
               ),
             )
           else
-            ...List.generate(locations.length, (i) {
-              final loc = locations[i] as Map;
+            ...List.generate(parsed.length, (i) {
+              final loc = parsed[i];
               return Card(
                 child: ListTile(
-                  leading: const Icon(Icons.location_on, color: AppColors.primary),
-                  title: Text((loc['label'] ?? 'Dirección').toString()),
-                  subtitle: Text((loc['address'] ?? '').toString()),
+                  onTap: () => _setDefaultAddress(loc.id),
+                  leading: Icon(
+                    loc.isDefault ? Icons.home : Icons.location_on_outlined,
+                    color: AppColors.primary,
+                  ),
+                  title: Text(loc.title),
+                  subtitle: Text(
+                    loc.isDefault
+                        ? '${loc.address}\nPredeterminada'
+                        : loc.address,
+                  ),
+                  isThreeLine: loc.isDefault && loc.address.isNotEmpty,
                   trailing: IconButton(
                     icon: const Icon(Icons.delete_outline, color: AppColors.discount),
                     onPressed: () => _deleteAddress(i),
@@ -281,6 +489,137 @@ class _AccountScreenState extends State<AccountScreen> {
                 style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfile(String? email) {
+    final user = context.watch<AppProvider>().user;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: () => setState(() => _view = 'dashboard'),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          const Text('Perfil', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 16),
+          Center(
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 44,
+                  backgroundImage: user?.imageUrl != null
+                      ? NetworkImage(user!.imageUrl!)
+                      : null,
+                  child: user?.imageUrl == null
+                      ? const Icon(Icons.person, size: 40)
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _uploadingPhoto ? null : _pickPhoto,
+                  child: Text(_uploadingPhoto
+                      ? 'Subiendo…'
+                      : user?.imageUrl != null
+                          ? 'Cambiar foto'
+                          : 'Agregar foto'),
+                ),
+                if (user?.imageUrl != null)
+                  TextButton(
+                    onPressed: _uploadingPhoto ? null : _removePhoto,
+                    child: const Text('Quitar foto', style: TextStyle(color: AppColors.discount)),
+                  ),
+              ],
+            ),
+          ),
+          TextField(
+            controller: _nombreCtrl,
+            decoration: const InputDecoration(labelText: 'Nombre'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            enabled: false,
+            decoration: InputDecoration(labelText: 'Correo', hintText: email ?? ''),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _telefonoCtrl,
+            keyboardType: TextInputType.phone,
+            decoration: const InputDecoration(labelText: 'Teléfono'),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : () => setState(() => _view = 'dashboard'),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _saveProfile,
+                  child: Text(_saving ? 'Guardando…' : 'Guardar'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPassword() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          IconButton(
+            onPressed: () => setState(() => _view = 'dashboard'),
+            icon: const Icon(Icons.arrow_back),
+          ),
+          const Text('Contraseña', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          const Text(
+            'Mín. 8 caracteres, mayúscula, minúscula, número y un carácter especial.',
+            style: TextStyle(color: AppColors.textLight),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pwdCtrl,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Nueva contraseña'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _pwd2Ctrl,
+            obscureText: true,
+            decoration: const InputDecoration(labelText: 'Confirmar contraseña'),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _saving ? null : () => setState(() => _view = 'dashboard'),
+                  child: const Text('Cancelar'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: FilledButton(
+                  onPressed: _saving ? null : _savePassword,
+                  child: Text(_saving ? 'Guardando…' : 'Guardar'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

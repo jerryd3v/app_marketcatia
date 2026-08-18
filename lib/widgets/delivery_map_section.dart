@@ -15,6 +15,10 @@ class DeliveryMapSection extends StatefulWidget {
     required this.rates,
     required this.onCostChanged,
     this.shippingSubtype = 'standard',
+    this.initialDestination,
+    this.initialName,
+    this.initialAddress,
+    this.autoGps = false,
   });
 
   final DeliveryCostRates rates;
@@ -26,6 +30,10 @@ class DeliveryMapSection extends StatefulWidget {
     String? locationName,
   }) onCostChanged;
   final String shippingSubtype;
+  final LatLng? initialDestination;
+  final String? initialName;
+  final String? initialAddress;
+  final bool autoGps;
 
   @override
   State<DeliveryMapSection> createState() => _DeliveryMapSectionState();
@@ -44,6 +52,23 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
   double _cost = 0;
   bool _routing = false;
   String? _routeError;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialName != null) _nameCtrl.text = widget.initialName!;
+    if (widget.initialAddress != null) {
+      _addressCtrl.text = widget.initialAddress!;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (widget.autoGps) {
+        _useGps();
+      } else if (widget.initialDestination != null) {
+        _setDestination(widget.initialDestination!);
+      }
+    });
+  }
 
   @override
   void dispose() {

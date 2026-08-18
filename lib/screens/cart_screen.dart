@@ -18,6 +18,8 @@ import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/delivery_cost.dart';
 import '../utils/pricing.dart';
+import '../utils/user_location.dart';
+import '../constants/geo_reference.dart';
 import '../widgets/add_products_modal.dart';
 import '../widgets/delivery_map_section.dart';
 
@@ -61,6 +63,8 @@ class _CartScreenState extends State<CartScreen> {
   LatLng? _deliveryDest;
   String? _deliveryAddress;
   String? _deliveryLocationName;
+  String? _selectedLocationId;
+  bool _locationEditorOpen = false;
 
   final _refCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
@@ -130,6 +134,58 @@ class _CartScreenState extends State<CartScreen> {
     } catch (_) {
       if (mounted) setState(() => _loadingRates = false);
     }
+  }
+
+  void _applySavedLocation(UserLocation loc) {
+    var km = loc.distanceKm;
+    if (km == null && loc.lat != null && loc.lng != null) {
+      km = haversineKm(
+        catiaReferenceLocation.latitude,
+        catiaReferenceLocation.longitude,
+        loc.lat!,
+        loc.lng!,
+      );
+    }
+    final cost = km == null
+        ? 0.0
+        : calculateDeliveryCost(
+            km,
+            kilometer: _deliveryRates.kilometer,
+            amount: _deliveryRates.amountStandard,
+          );
+    setState(() {
+      _selectedLocationId = loc.id;
+      _deliveryLocationName = loc.title;
+      _deliveryAddress = loc.address;
+      _deliveryDistanceKm = km;
+      _deliveryCost = cost;
+      _deliveryDest = (loc.lat != null && loc.lng != null)
+          ? LatLng(loc.lat!, loc.lng!)
+          : null;
+      _locationEditorOpen = false;
+    });
+  }
+
+  List<UserLocation> _savedLocations() {
+    final user = context.read<AppProvider>().user;
+    return parseUserLocations(user?.locations ?? const []);
+  }
+
+  void _selectDelivery() {
+    final saved = _savedLocations();
+    UserLocation? loc;
+    for (final item in saved) {
+      if (item.id == _selectedLocationId) {
+        loc = item;
+        break;
+      }
+    }
+    loc ??= pickDefaultLocation(saved);
+    setState(() {
+      _deliveryType = 'delivery';
+      if (loc == null) _locationEditorOpen = true;
+    });
+    if (loc != null) _applySavedLocation(loc);
   }
 
   Future<void> _loadPagoMovilStore() async {
@@ -705,30 +761,170 @@ class _CartScreenState extends State<CartScreen> {
                 subtitle: _deliveryDistanceKm != null
                     ? 'Costo: ${_fmt.format(_deliveryCost)} · ${_deliveryDistanceKm!.toStringAsFixed(1)} km'
                     : 'Marca tu ubicación en el mapa',
-                onTap: () => setState(() => _deliveryType = 'delivery'),
+                onTap: _selectDelivery,
               ),
-              if (_deliveryType == 'delivery')
-                DeliveryMapSection(
-                  rates: _deliveryRates,
-                  onCostChanged: ({
-                    required cost,
-                    required distanceKm,
-                    destination,
-                    address,
-                    locationName,
-                  }) {
-                    setState(() {
-                      _deliveryCost = cost;
-                      _deliveryDistanceKm = distanceKm;
-                      _deliveryDest = destination;
-                      _deliveryAddress = address;
-                      _deliveryLocationName = locationName;
-                    });
-                  },
-                ),
+              if (_deliveryType == 'delivery') _buildDeliveryLocationBody(),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildDeliveryLocationBody() {
+    final saved = parseUserLocations(
+      context.watch<AppProvider>().user?.locations ?? const [],
+    );
+    final selected = saved.where((l) => l.id == _selectedLocationId).toList();
+    final showSummary = !_locationEditorOpen &&
+        (_selectedLocationId != null || _deliveryAddress != null);
+
+    if (showSummary) {
+      final title = selected.isNotEmpty
+          ? selected.first.title
+          : (_deliveryLocationName ?? 'Ubicación seleccionada');
+      final address = selected.isNotEmpty
+          ? selected.first.address
+          : (_deliveryAddress ?? 'Sin dirección');
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.lightBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Dirección de entrega',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textLight,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(address, style: const TextStyle(color: AppColors.textMedium, fontSize: 13)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => setState(() => _locationEditorOpen = true),
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Modificar ubicación'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DeliveryMapSection(
+          key: ValueKey(_selectedLocationId ?? 'map'),
+          rates: _deliveryRates,
+          initialDestination: _deliveryDest,
+          initialName: _deliveryLocationName,
+          initialAddress: _deliveryAddress,
+          onCostChanged: ({
+            required cost,
+            required distanceKm,
+            destination,
+            address,
+            locationName,
+          }) {
+            setState(() {
+              _deliveryCost = cost;
+              _deliveryDistanceKm = distanceKm;
+              _deliveryDest = destination;
+              _deliveryAddress = address;
+              _deliveryLocationName = locationName;
+              _selectedLocationId = null;
+            });
+          },
+        ),
+        if (saved.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Row(
+            children: [
+              Icon(Icons.favorite, color: AppColors.discount, size: 16),
+              SizedBox(width: 6),
+              Text(
+                'Ubicaciones guardadas',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 1.6,
+            children: [
+              for (final loc in saved)
+                InkWell(
+                  onTap: () => _applySavedLocation(loc),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        width: 2,
+                        color: _selectedLocationId == loc.id
+                            ? AppColors.primary
+                            : AppColors.border,
+                      ),
+                      color: _selectedLocationId == loc.id
+                          ? AppColors.primary.withValues(alpha: 0.05)
+                          : AppColors.cardBg,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          loc.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          loc.address,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppColors.textLight,
+                          ),
+                        ),
+                        if (loc.distanceKm != null)
+                          Text(
+                            '${loc.distanceKm!.toStringAsFixed(1)} km',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textLight,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ],
     );
   }

@@ -12,6 +12,7 @@ import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/pricing.dart';
+import 'spin_y_icons.dart';
 
 final _offerPriceFmt = NumberFormat('#,##0.00', 'es');
 
@@ -855,7 +856,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
-            padding: EdgeInsets.only(left: 4, bottom: 12),
+            padding: EdgeInsets.only(left: 4, bottom: 16),
             child: Row(
               children: [
                 Icon(Icons.local_fire_department, color: AppColors.featured),
@@ -867,6 +868,13 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
                     fontWeight: FontWeight.w700,
                     color: AppColors.textDark,
                   ),
+                ),
+                SizedBox(width: 6),
+                SpinYIcons(
+                  icon: Icons.bolt,
+                  count: 3,
+                  color: AppColors.featured,
+                  size: 18,
                 ),
               ],
             ),
@@ -899,6 +907,7 @@ class _FeaturedCarouselState extends State<FeaturedCarousel> {
                           return Padding(
                             padding: const EdgeInsets.all(gridPad),
                             child: GridView.builder(
+                              padding: EdgeInsets.zero,
                               physics:
                                   const NeverScrollableScrollPhysics(),
                               gridDelegate:

@@ -240,6 +240,28 @@ class ApiService {
     }
   }
 
+  Future<void> changePassword({
+    required String userId,
+    required String newPassword,
+  }) async {
+    final res = await http.post(
+      Uri.parse('${ApiConfig.apiBase}/users/change_password'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'userId': userId, 'newPassword': newPassword}),
+    );
+    Map<String, dynamic> data = {};
+    try {
+      if (res.body.isNotEmpty) {
+        data = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+      }
+    } catch (_) {}
+    if (res.statusCode >= 400 || data['status'] != 200) {
+      throw Exception(
+        (data['message'] ?? 'Error al cambiar contraseña').toString(),
+      );
+    }
+  }
+
   Future<void> notifyOrderCreated(Map<String, dynamic> body) async {
     try {
       await http

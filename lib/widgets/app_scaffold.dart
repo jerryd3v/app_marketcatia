@@ -6,9 +6,11 @@ import '../theme/app_colors.dart';
 import 'app_header.dart';
 import 'bottom_nav.dart';
 import 'emily_chat_widget.dart';
+import 'home_context_bar.dart';
 import 'market_search_bar.dart';
 import 'mode_notification.dart';
 import 'payment_modality_prompt.dart';
+import 'store_comments.dart';
 
 class AppScaffold extends StatelessWidget {
   const AppScaffold({
@@ -36,6 +38,7 @@ class AppScaffold extends StatelessWidget {
                 Consumer<AppProvider>(
                   builder: (context, app, _) => _SearchField(app: app),
                 ),
+              if (location == '/') const HomeContextBar(),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.only(bottom: 0),
@@ -47,6 +50,7 @@ class AppScaffold extends StatelessWidget {
           const ModeNotification(),
           const PaymentModalityPrompt(),
           const EmilyChatWidget(),
+          if (location == '/') const StoreCommentPrompt(),
         ],
       ),
       bottomNavigationBar: const BottomNav(),

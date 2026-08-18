@@ -8,6 +8,7 @@ import '../config/content_policy.dart';
 import '../models/models.dart';
 import '../models/payment_store_settings.dart';
 import '../utils/order_money.dart';
+import '../utils/user_location.dart';
 
 class FirebaseService {
   FirebaseFirestore get db => FirebaseFirestore.instance;
@@ -187,6 +188,246 @@ class FirebaseService {
 
   Future<void> updateUserLocations(String uid, List locations) =>
       db.collection('user').doc(uid).update({'locations': locations});
+
+  Future<List<UserLocation>> fetchUserLocations(String uid) async {
+    final user = await fetchUser(uid);
+    return parseUserLocations(user?.locations ?? const []);
+  }
+
+  Future<List<UserLocation>> setDefaultUserLocation(
+    String uid,
+    String locationId,
+  ) async {
+    final current = await fetchUserLocations(uid);
+    final updated = current
+        .map((loc) => UserLocation(
+              id: loc.id,
+              title: loc.title,
+              address: loc.address,
+              lat: loc.lat,
+              lng: loc.lng,
+              distanceKm: loc.distanceKm,
+              zone: loc.zone,
+              mapUrl: loc.mapUrl,
+              isDefault: loc.id == locationId,
+              deliveryLocation: loc.deliveryLocation,
+            ))
+        .toList();
+    await updateUserLocations(uid, updated.map((e) => e.toMap()).toList());
+    return updated;
+  }
+
+  Future<UserLocation> addUserLocation(String uid, UserLocation location) async {
+    final current = await fetchUserLocations(uid);
+    final next = [
+      ...current.map((loc) => UserLocation(
+            id: loc.id,
+            title: loc.title,
+            address: loc.address,
+            lat: loc.lat,
+            lng: loc.lng,
+            distanceKm: loc.distanceKm,
+            zone: loc.zone,
+            mapUrl: loc.mapUrl,
+            isDefault: false,
+            deliveryLocation: loc.deliveryLocation,
+          )),
+      location,
+    ];
+    await updateUserLocations(uid, next.map((e) => e.toMap()).toList());
+    return location;
+  }
+
+  Future<void> updateUserProfile(
+    String uid, {
+    String? nombre,
+    String? telefono,
+    String? imageUrl,
+    bool clearImage = false,
+    String? password,
+  }) async {
+    final data = <String, dynamic>{};
+    if (nombre != null) data['nombre'] = nombre;
+    if (telefono != null) data['telefono'] = telefono.isEmpty ? null : telefono;
+    if (password != null) data['password'] = password;
+    if (clearImage) {
+      data['imageUrl'] = null;
+      data['img'] = null;
+      data['idImgUser'] = null;
+    } else if (imageUrl != null) {
+      data['imageUrl'] = imageUrl;
+      data['img'] = imageUrl;
+      data['idImgUser'] = uid;
+    }
+    if (data.isEmpty) return;
+    await db.collection('user').doc(uid).update(data);
+  }
+
+  static const _profileImgPath = 'images/user/userImg';
+
+  Future<String> uploadProfileImage(String uid, List<int> bytes) async {
+    final ref = storage.ref('$_profileImgPath/$uid.png');
+    await ref
+        .putData(
+          Uint8List.fromList(bytes),
+          SettableMetadata(contentType: 'image/png'),
+        )
+        .timeout(const Duration(seconds: 45));
+    return ref.getDownloadURL().timeout(const Duration(seconds: 20));
+  }
+
+  Future<void> deleteProfileImage(String uid) async {
+    try {
+      await storage.ref('$_profileImgPath/$uid.png').delete();
+    } catch (_) {/* ignore missing */}
+  }
+
+  static const storeCommentsCollection = 'store_comments';
+  static const commentMaxLen = 160;
+  static const commentMaxEdits = 3;
+
+  Future<bool> userHasPurchases(String uid) async {
+    final orders = await fetchUserOrders(uid);
+    return orders.any(
+      (o) => o['trash'] != true && o['type'] != 'credit_note',
+    );
+  }
+
+  Future<Map<String, dynamic>?> getUserStoreComment(String uid) async {
+    final snap = await db.collection(storeCommentsCollection).doc(uid).get();
+    if (!snap.exists) return null;
+    return {'id': snap.id, ...snap.data()!};
+  }
+
+  Future<List<Map<String, dynamic>>> fetchVisibleStoreComments() async {
+    final snap = await db.collection(storeCommentsCollection).get();
+    final list = snap.docs
+        .map((d) => {'id': d.id, ...d.data()})
+        .where((c) => c['hidden'] != true && '${c['text'] ?? ''}'.trim().isNotEmpty)
+        .toList();
+    list.sort((a, b) {
+      int millis(dynamic v) {
+        if (v is Timestamp) return v.millisecondsSinceEpoch;
+        if (v is DateTime) return v.millisecondsSinceEpoch;
+        return 0;
+      }
+      return millis(b['createdAt']).compareTo(millis(a['createdAt']));
+    });
+    return list;
+  }
+
+  int commentLikeCount(Map<String, dynamic> comment) {
+    final n = comment['likeCount'];
+    if (n is num && n >= 0) return n.toInt();
+    final likedBy = comment['likedBy'];
+    if (likedBy is List) return likedBy.length;
+    return 0;
+  }
+
+  bool commentLikedByUser(Map<String, dynamic> comment, String? uid) {
+    if (uid == null) return false;
+    final likedBy = comment['likedBy'];
+    return likedBy is List && likedBy.contains(uid);
+  }
+
+  Future<({bool liked, int likeCount})> toggleStoreCommentLike(
+    String commentId,
+    String userId,
+  ) async {
+    final ref = db.collection(storeCommentsCollection).doc(commentId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Comentario no encontrado');
+    final data = snap.data()!;
+    final likedBy = data['likedBy'] is List ? List.from(data['likedBy'] as List) : [];
+    final liked = likedBy.contains(userId);
+    if (liked) {
+      await ref.update({
+        'likedBy': FieldValue.arrayRemove([userId]),
+        'likeCount': FieldValue.increment(-1),
+      });
+      return (liked: false, likeCount: (commentLikeCount(data) - 1).clamp(0, 1 << 30));
+    }
+    await ref.update({
+      'likedBy': FieldValue.arrayUnion([userId]),
+      'likeCount': FieldValue.increment(1),
+    });
+    return (liked: true, likeCount: commentLikeCount(data) + 1);
+  }
+
+  Future<void> createStoreComment({
+    required String userId,
+    required String userName,
+    String? userImg,
+    required String text,
+    required int rating,
+  }) async {
+    final existing = await getUserStoreComment(userId);
+    if (existing != null) throw Exception('Ya dejaste tu comentario');
+    final clean = text.trim();
+    if (clean.isEmpty) throw Exception('Escribe un comentario');
+    if (clean.length > commentMaxLen) {
+      throw Exception('Máximo $commentMaxLen caracteres');
+    }
+    if (rating < 1 || rating > 5) {
+      throw Exception('Elige una valoración de 1 a 5');
+    }
+    await db.collection(storeCommentsCollection).doc(userId).set({
+      'userId': userId,
+      'userName': userName,
+      'userImg': userImg,
+      'text': clean,
+      'rating': rating,
+      'editCount': 0,
+      'hidden': false,
+      'likeCount': 0,
+      'likedBy': <String>[],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateStoreComment({
+    required String userId,
+    required String text,
+    required int rating,
+  }) async {
+    final existing = await getUserStoreComment(userId);
+    if (existing == null) throw Exception('No tienes comentario para editar');
+    final edits = (existing['editCount'] as num?)?.toInt() ?? 0;
+    if (edits >= commentMaxEdits) {
+      throw Exception('Ya usaste las $commentMaxEdits ediciones permitidas');
+    }
+    final clean = text.trim();
+    if (clean.isEmpty) throw Exception('Escribe un comentario');
+    if (clean.length > commentMaxLen) {
+      throw Exception('Máximo $commentMaxLen caracteres');
+    }
+    if (rating < 1 || rating > 5) {
+      throw Exception('Elige una valoración de 1 a 5');
+    }
+    await db.collection(storeCommentsCollection).doc(userId).update({
+      'text': clean,
+      'rating': rating,
+      'editCount': edits + 1,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> patchStoreCommentAuthor(
+    String uid, {
+    String? userName,
+    String? userImg,
+    bool clearImg = false,
+  }) async {
+    final mine = await getUserStoreComment(uid);
+    if (mine == null) return;
+    final patch = <String, dynamic>{};
+    if (userName != null) patch['userName'] = userName;
+    if (clearImg) patch['userImg'] = null;
+    if (userImg != null) patch['userImg'] = userImg;
+    if (patch.isEmpty) return;
+    await db.collection(storeCommentsCollection).doc(uid).update(patch);
+  }
 
   Future<List<Map<String, dynamic>>> fetchUserOrders(String uid) async {
     // Web guarda idUser; la app antigua guardaba uid.
