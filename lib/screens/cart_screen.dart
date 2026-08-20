@@ -338,18 +338,9 @@ class _CartScreenState extends State<CartScreen> {
       final user = provider.user;
       if (user == null) throw Exception('Debes iniciar sesión');
 
-      if (_isCashea) {
-        final validation = await _api.validateCredit({
-          'uid': user.uid,
-          'total': _total,
-          'items': _cart.map((e) => e.toJson()).toList(),
-        });
-        if (validation['valid'] != true && validation['success'] != true) {
-          throw Exception(
-            validation['message']?.toString() ?? 'Crédito Cashea no disponible',
-          );
-        }
-      }
+      // ponytail: Cashea no usa crédito de tienda (validate-credit-purchase);
+      // la web solo registra el pedido + payment_type cashea. Validar aquí
+      // bloqueaba a todos (además enviaba uid/total en vez de userId/amount).
 
       final productos = _cart.map((e) => e.toJson()).toList();
       final deliveryType =
@@ -387,8 +378,9 @@ class _CartScreenState extends State<CartScreen> {
         'status': 'Pendiente',
         'colorStatus': '#868e96',
         'preparation_status': 'Pendiente',
-        'condicion': _isCashea ? 'Credito' : 'Contado',
-        'payment_method': _isCashea ? 'credit' : 'cash',
+        // Cashea ≠ crédito interno de tienda; no marcar Credito o contamina límites.
+        'condicion': 'Contado',
+        'payment_method': _isCashea ? 'cashea' : 'cash',
         'trash': false,
         'viewOrder': false,
         'viewOrderPrinter': false,

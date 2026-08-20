@@ -565,6 +565,10 @@ class _OrderCard extends StatelessWidget {
 
   static String _paymentLabel(Map<String, dynamic> order) {
     final method = (order['payment_method'] ?? '').toString().toLowerCase();
+    final paymentType = (order['payment_type'] ?? order['paymentModality'] ?? '')
+        .toString()
+        .toLowerCase();
+    if (method == 'cashea' || paymentType == 'cashea') return 'Cashea';
     if (method == 'credit') return 'Crédito';
     final cond = (order['condicion'] ?? '').toString().toLowerCase();
     if (cond.contains('credito') || cond.contains('crédito')) return 'Crédito';
