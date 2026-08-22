@@ -76,7 +76,8 @@ class Product {
       stock: m['stock'] ?? m['existencia'] ?? m['quantity'],
       ventas: m['ventas'] ?? 0,
       taxable: m['taxable'] is bool ? m['taxable'] as bool : null,
-      ivaRate: m['iva_rate'] ?? m['ivaRate'],
+      // API a veces manda iva_rate como string ("0.16"); num? crashea y vacía la búsqueda.
+      ivaRate: _toDouble(m['iva_rate'] ?? m['ivaRate']),
       peso: m['peso'] ?? 0,
       show: m['show'] != false,
       raw: Map<String, dynamic>.from(m),
@@ -216,7 +217,7 @@ class CartItem {
         imgUrl100: j['imgUrl100']?.toString(),
         discounts: j['discounts'] is List ? List.from(j['discounts']) : const [],
         taxable: j['taxable'] is bool ? j['taxable'] as bool : null,
-        ivaRate: j['iva_rate'] ?? j['ivaRate'],
+        ivaRate: Product._toDouble(j['iva_rate'] ?? j['ivaRate']),
         peso: j['peso'] ?? 0,
         casheaSurchargeApplied: j['casheaSurchargeApplied'] == true,
         precioCatalogoPresentacion:

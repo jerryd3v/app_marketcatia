@@ -17,7 +17,8 @@ class ApiService {
   /// Misma API que el modal web (`POST /products/system_report`).
   /// Sin [name] envía `{}` y trae el listado inicial al abrir el modal.
   Future<List<Product>> reportProducts({String? name, int? limit}) async {
-    final body = <String, dynamic>{};
+    // Mismo body que la web: { name, show: true }
+    final body = <String, dynamic>{'show': true};
     if (name != null && name.trim().isNotEmpty) {
       body['name'] = name.trim();
     }
@@ -30,11 +31,16 @@ class ApiService {
       throw Exception('Error búsqueda: ${res.statusCode}');
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
-    var list = (data['data'] as List? ?? [])
-        .whereType<Map>()
-        .map((e) => Product.fromMap(Map<String, dynamic>.from(e)))
-        .toList();
-    if (limit != null) list = list.take(limit).toList();
+    final list = <Product>[];
+    for (final raw in (data['data'] as List? ?? [])) {
+      if (raw is! Map) continue;
+      try {
+        list.add(Product.fromMap(Map<String, dynamic>.from(raw)));
+      } catch (_) {
+        // ponytail: un producto mal tipado no debe tumbar toda la búsqueda
+      }
+    }
+    if (limit != null) return list.take(limit).toList();
     return list;
   }
 
