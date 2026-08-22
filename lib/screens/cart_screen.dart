@@ -36,6 +36,10 @@ String _orderPlatformLabel() {
   }
 }
 
+/// Dirección fiscal de retiro (RIF Inversiones Market Catia, C.A.).
+const kPickupStoreAddress =
+    'Calle Argentina entre 3era y 4ta Avenida, Local PB, Nro 78, Urb. Pérez Bonalde, Catia, Caracas 1030';
+
 class CartScreen extends StatefulWidget {
   const CartScreen({
     super.key,
@@ -345,6 +349,8 @@ class _CartScreenState extends State<CartScreen> {
       final productos = _cart.map((e) => e.toJson()).toList();
       final deliveryType =
           _deliveryType == 'delivery' ? 'delivery' : 'pickup';
+      final orderAddress =
+          deliveryType == 'pickup' ? kPickupStoreAddress : _deliveryAddress;
       final sede = provider.sedeSeleccionada;
       final numeroPedido = await _api.fetchNextOrderNumber();
       final orderId = '$numeroPedido';
@@ -371,6 +377,8 @@ class _CartScreenState extends State<CartScreen> {
         'telefonoUser': user.telefono,
         'documento': user.documento,
         'email': user.email,
+        'direccion': orderAddress,
+        if (deliveryType == 'pickup') 'zona': 'Pick Up',
         'numeroPedido': numeroPedido,
         'costoTotal': _total,
         'products_total': _subtotal,
@@ -390,7 +398,7 @@ class _CartScreenState extends State<CartScreen> {
         'plataform': _orderPlatformLabel(),
         'delivery_type': deliveryType,
         if (deliveryType == 'delivery') 'checkDelivery': 'Pendiente',
-        'delivery_address': _deliveryAddress,
+        'delivery_address': orderAddress,
         'order_comment': _commentCtrl.text.trim().isEmpty
             ? null
             : _commentCtrl.text.trim(),
@@ -413,7 +421,7 @@ class _CartScreenState extends State<CartScreen> {
         'deliveryType': deliveryType,
         'deliveryCost': _deliveryFee,
         'deliveryDistanceKm': _deliveryDistanceKm,
-        'deliveryAddress': _deliveryAddress,
+        'deliveryAddress': orderAddress,
         'deliveryLocationName': _deliveryLocationName,
         if (_deliveryDest != null) ...{
           'deliveryLat': _deliveryDest!.latitude,
@@ -736,13 +744,12 @@ class _CartScreenState extends State<CartScreen> {
                 selected: _deliveryType == 'pickup',
                 icon: Icons.storefront_outlined,
                 title: 'Retiro en tienda',
-                subtitle: provider.sedeSeleccionada != null
-                    ? provider.sedeSeleccionada!.name
-                    : 'Sin costo adicional',
+                subtitle: kPickupStoreAddress,
                 onTap: () => setState(() {
                   _deliveryType = 'pickup';
                   _deliveryCost = 0;
                   _deliveryDistanceKm = null;
+                  _deliveryAddress = kPickupStoreAddress;
                 }),
               ),
               const SizedBox(height: 10),
