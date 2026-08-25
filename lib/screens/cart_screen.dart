@@ -487,6 +487,7 @@ class _CartScreenState extends State<CartScreen> {
       await _api.notifyPrinter({
         'order': numeroPedido,
         'sede': sede?.raw['codigo'] ?? sede?.id,
+        'empresa': 'marketcatia',
       });
 
       if (!widget.embedded) {
