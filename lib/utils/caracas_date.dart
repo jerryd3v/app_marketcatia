@@ -8,6 +8,12 @@ String caracasDateString([DateTime? date]) {
   return '$y-$m-$d';
 }
 
+/// Header web: DD/MM/YY (ej. 29/08/26).
+String caracasDateHeaderLabel([DateTime? date]) {
+  final parts = caracasDateString(date).split('-');
+  return '${parts[2]}/${parts[1]}/${parts[0].substring(2)}';
+}
+
 bool isDateInCaracasRange(dynamic startDate, dynamic endDate, [String? dateStr]) {
   final start = startDate?.toString().trim() ?? '';
   final end = endDate?.toString().trim() ?? '';

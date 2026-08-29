@@ -239,7 +239,6 @@ class _AdBannerCarouselState extends State<AdBannerCarousel> {
         return;
       case 'wholesale':
         context.go('/');
-        await app.cambiarModo('wholesale');
         return;
       case 'external_url':
         final url = banner['externalUrl']?.toString() ?? '';

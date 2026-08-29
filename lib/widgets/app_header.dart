@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/caracas_date.dart';
 import 'music_player_bar.dart';
 import 'orders_history_modal.dart';
 
@@ -64,7 +65,7 @@ class AppHeader extends StatelessWidget {
                       if (isCartFlow && app.user != null)
                         _MisPedidosButton(uid: app.user!.uid)
                       else
-                        _ModeToggle(app: app),
+                        const _ModeToggle(),
                       const SizedBox(width: 8),
                       if (!isCartFlow) _CartButton(count: app.cartCount),
                     ],
@@ -136,55 +137,65 @@ class _BranchSelector extends StatelessWidget {
 }
 
 class _ModeToggle extends StatelessWidget {
-  const _ModeToggle({required this.app});
-  final AppProvider app;
+  const _ModeToggle();
+
+  static const _dateColor = Color(0xFFE94E66);
 
   @override
   Widget build(BuildContext context) {
-    final isWholesale = app.modo == 'wholesale';
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.lightBg,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _chip('Minorista', !isWholesale, AppColors.retail, () {
-            app.cambiarModo('retail');
-          }),
-          _chip('Mayorista', isWholesale, AppColors.wholesale, () {
-            app.cambiarModo('wholesale');
-          }),
-        ],
-      ),
+    final fechaHoy = caracasDateHeaderLabel();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _staticChip(
+          icon: Icons.calendar_today_outlined,
+          label: fechaHoy,
+          color: _dateColor,
+        ),
+        const SizedBox(width: 6),
+        _staticChip(
+          icon: Icons.storefront,
+          label: 'Mayorista',
+          color: AppColors.wholesale,
+        ),
+      ],
     );
   }
 
-  Widget _chip(
-    String label,
-    bool active,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: active ? color : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: active ? Colors.white : AppColors.textLight,
+  Widget _staticChip({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppColors.radiusSm),
+        border: Border.all(color: color, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.12),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
           ),
-        ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+              height: 1,
+            ),
+          ),
+        ],
       ),
     );
   }

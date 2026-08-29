@@ -8,7 +8,6 @@ import 'bottom_nav.dart';
 import 'emily_chat_widget.dart';
 import 'home_context_bar.dart';
 import 'market_search_bar.dart';
-import 'mode_notification.dart';
 import 'payment_modality_prompt.dart';
 import 'store_comments.dart';
 
@@ -47,7 +46,6 @@ class AppScaffold extends StatelessWidget {
               ),
             ],
           ),
-          const ModeNotification(),
           const PaymentModalityPrompt(),
           const EmilyChatWidget(),
           if (location == '/') const StoreCommentPrompt(),

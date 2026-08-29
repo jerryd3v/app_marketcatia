@@ -36,7 +36,6 @@ class AppProvider extends ChangeNotifier {
   static const _cartKey = 'marketcatia_cart';
   static const _userKey = 'marketcatia_user';
   static const _modalityKey = CartPaymentModality.key;
-  static const _modoKey = 'marketcatia_modo';
   static const _sedeKey = 'marketcatia_sede';
 
   List<CartItem> carrito = [];
@@ -150,7 +149,7 @@ class AppProvider extends ChangeNotifier {
         );
       } catch (_) {}
     }
-    modo = prefs.getString(_modoKey) ?? 'wholesale';
+    modo = 'wholesale';
     _pendingSedeId = prefs.getString(_sedeKey);
   }
 
@@ -373,19 +372,12 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Modo fijo a mayorista (como la web). Sin cambio de modo ni notificación.
   Future<void> cambiarModo(String newModo) async {
-    if (modo == newModo) return;
-    modo = newModo;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_modoKey, modo);
-    await clearCart();
-    modeNotificationVisible = true;
-    notifyListeners();
-    unawaited(_loadDailyOffers());
-    Future.delayed(const Duration(seconds: 3), () {
-      modeNotificationVisible = false;
+    if (modo != 'wholesale') {
+      modo = 'wholesale';
       notifyListeners();
-    });
+    }
   }
 
   void dismissModeNotification() {
