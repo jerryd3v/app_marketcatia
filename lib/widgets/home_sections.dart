@@ -12,7 +12,14 @@ import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
 import '../utils/pricing.dart';
+import 'offer_flyer_slide.dart';
 import 'spin_y_icons.dart';
+
+bool _isOfferFlyerBanner(Map<String, dynamic> b) =>
+    (b['ctaAction'] ?? '').toString() == 'offer_flyer';
+
+double _bannerCarouselHeight(Map<String, dynamic> b) =>
+    _isOfferFlyerBanner(b) ? 380 : 168;
 
 final _offerPriceFmt = NumberFormat('#,##0.00', 'es');
 
@@ -248,6 +255,7 @@ class _AdBannerCarouselState extends State<AdBannerCarousel> {
           await launchUrl(uri, mode: LaunchMode.externalApplication);
         }
         return;
+      case 'offer_flyer':
       case 'campaign_view':
       default:
         final id = banner['id']?.toString() ?? '';
@@ -315,19 +323,32 @@ class _AdBannerCarouselState extends State<AdBannerCarousel> {
       );
     }
 
+    final current = banners[_index.clamp(0, banners.length - 1)];
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: 168,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            height: _bannerCarouselHeight(current),
             child: PageView.builder(
               controller: _controller,
               itemCount: banners.length,
               onPageChanged: (i) => setState(() => _index = i),
               itemBuilder: (_, i) {
                 final b = banners[i];
+                if (_isOfferFlyerBanner(b)) {
+                  return Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                    child: OfferFlyerSlide(
+                      banner: b,
+                      onTap: () => _executeBannerAction(context, b),
+                    ),
+                  );
+                }
                 if (b['ctaAction'] == 'announcement') {
                   final img = (b['backgroundImageMobileUrl'] ??
                           b['backgroundImageUrl'] ??

@@ -63,9 +63,13 @@ class _CampaignScreenState extends State<CampaignScreen> {
         final id = widget.bannerId ?? '';
         campaign = await app.promo.fetchPromoBannerById(id);
         if (campaign == null) throw Exception('Campaña no encontrada');
+        final isOfferFlyer =
+            (campaign['ctaAction'] ?? '').toString() == 'offer_flyer';
         hero = {
           'title': campaign['titulo'] ?? campaign['title'] ?? 'Campaña',
-          'subtitle': campaign['subtitulo'] ?? campaign['subtitle'] ?? '',
+          'subtitle': isOfferFlyer
+              ? 'Ofertas de esta semana'
+              : (campaign['subtitulo'] ?? campaign['subtitle'] ?? ''),
           'backgroundType': campaign['backgroundType'],
           'backgroundGradient': campaign['backgroundGradient'],
           'backgroundImageUrl': campaign['backgroundImageUrl'],

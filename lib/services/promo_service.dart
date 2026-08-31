@@ -21,10 +21,21 @@ class PromoService {
         (a, b) =>
             (a['orden'] as num? ?? 0).compareTo(b['orden'] as num? ?? 0),
       );
+      final today = caracasDateString();
       return list.where((b) {
-        if (b['ctaAction'] != 'announcement') return true;
-        return (b['backgroundImageUrl']?.toString().isNotEmpty ?? false) &&
-            (b['backgroundImageMobileUrl']?.toString().isNotEmpty ?? false);
+        final action = (b['ctaAction'] ?? '').toString();
+        if (action == 'announcement') {
+          return (b['backgroundImageUrl']?.toString().isNotEmpty ?? false) &&
+              (b['backgroundImageMobileUrl']?.toString().isNotEmpty ?? false);
+        }
+        if (action == 'offer_flyer') {
+          if (!isDateInCaracasRange(b['startDate'], b['endDate'], today)) {
+            return false;
+          }
+          final products = b['products'];
+          return products is List && products.isNotEmpty;
+        }
+        return true;
       }).toList();
     } catch (_) {
       return [];
