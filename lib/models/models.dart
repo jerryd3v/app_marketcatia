@@ -117,6 +117,32 @@ class Product {
     if (v is num) return v.toDouble();
     return double.tryParse(v.toString());
   }
+
+  Product copyWith({List<dynamic>? discounts}) => Product(
+        id: id,
+        name: name,
+        codigo: codigo,
+        price: price,
+        priceMayor: priceMayor,
+        priceBulto: priceBulto,
+        cantidadUnidad: cantidadUnidad,
+        cantidadMayor: cantidadMayor,
+        cantidadBulto: cantidadBulto,
+        statusUnidad: statusUnidad,
+        statusMayor: statusMayor,
+        statusBulto: statusBulto,
+        imgUrl: imgUrl,
+        imgUrl100: imgUrl100,
+        imgUrl250: imgUrl250,
+        discounts: discounts ?? this.discounts,
+        stock: stock,
+        ventas: ventas,
+        taxable: taxable,
+        ivaRate: ivaRate,
+        peso: peso,
+        show: show,
+        raw: raw,
+      );
 }
 
 class CartItem {

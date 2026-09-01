@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,7 @@ import '../config/content_policy.dart';
 import '../models/campaign_product.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
-import '../widgets/home_sections.dart';
+import '../widgets/catalog_widgets.dart';
 
 class CampaignScreen extends StatefulWidget {
   const CampaignScreen({
@@ -144,6 +145,9 @@ class _CampaignScreenState extends State<CampaignScreen> {
     final notice = (_hero!['notice'] ?? '').toString();
     final bgImage = (_hero!['backgroundImageUrl'] ?? '').toString();
     final isImage = _hero!['backgroundType'] == 'image' && bgImage.isNotEmpty;
+    final compactCards =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    final gridExtent = app.isWholesale ? 248.0 : 200.0;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -263,24 +267,21 @@ class _CampaignScreenState extends State<CampaignScreen> {
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
               sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 0.72,
-                ),
+                gridDelegate: compactCards
+                    ? SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        mainAxisExtent: gridExtent,
+                      )
+                    : const SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: 2,
+                        mainAxisSpacing: 12,
+                        crossAxisSpacing: 12,
+                        childAspectRatio: 0.58,
+                      ),
                 delegate: SliverChildBuilderDelegate(
-                  (context, i) {
-                    final p = filtered[i];
-                    return OfferProductCard(
-                      product: p,
-                      width: null,
-                      onTap: () {
-                        context.go('/');
-                        app.goToCampaignProduct(p);
-                      },
-                    );
-                  },
+                  (context, i) => ProductCard(product: filtered[i].product),
                   childCount: filtered.length,
                 ),
               ),

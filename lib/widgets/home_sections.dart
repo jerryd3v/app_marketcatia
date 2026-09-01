@@ -18,8 +18,10 @@ import 'spin_y_icons.dart';
 bool _isOfferFlyerBanner(Map<String, dynamic> b) =>
     (b['ctaAction'] ?? '').toString() == 'offer_flyer';
 
-double _bannerCarouselHeight(Map<String, dynamic> b) =>
-    _isOfferFlyerBanner(b) ? 380 : 168;
+double _bannerCarouselHeight(BuildContext context, Map<String, dynamic> b) {
+  if (!_isOfferFlyerBanner(b)) return 168;
+  return offerFlyerCarouselHeight(MediaQuery.sizeOf(context).width);
+}
 
 final _offerPriceFmt = NumberFormat('#,##0.00', 'es');
 
@@ -332,8 +334,9 @@ class _AdBannerCarouselState extends State<AdBannerCarousel> {
         children: [
           AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            height: _bannerCarouselHeight(current),
+            height: _bannerCarouselHeight(context, current),
             child: PageView.builder(
+              clipBehavior: Clip.none,
               controller: _controller,
               itemCount: banners.length,
               onPageChanged: (i) => setState(() => _index = i),

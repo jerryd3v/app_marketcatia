@@ -1,5 +1,6 @@
 import '../constants/cart_payment_modality.dart';
 import '../models/models.dart';
+import 'caracas_date.dart';
 
 const double casheaBulkSurchargeRate = 0.05;
 
@@ -10,30 +11,88 @@ bool presentationIsCasheaBulk(String? presentacion) {
   return p == 'bulto' || p == 'caja' || p == 'lote';
 }
 
-double resolveProductLevelDiscountPercent(List<dynamic> discounts) {
-  final arr = discounts;
-  final promo = arr.cast<dynamic>().whereType<Map>().cast<Map>().firstWhere(
-        (d) =>
-            d['name'] == 'Producto' &&
-            d['promoCampaignId'] != null &&
-            d['percent'] != null,
-        orElse: () => {},
-      );
-  if (promo.isNotEmpty) {
-    return (promo['percent'] as num?)?.toDouble() ?? 0;
+bool _isDiscountLive(Map d, [String? dateStr]) {
+  final start = d['promoStartDate']?.toString().trim() ?? '';
+  final end = d['promoEndDate']?.toString().trim() ?? '';
+  if (start.isNotEmpty && end.isNotEmpty) {
+    return isDateInCaracasRange(start, end, dateStr ?? caracasDateString());
   }
-  final producto = arr.whereType<Map>().cast<Map>().firstWhere(
-        (d) => d['name'] == 'Producto' && d['percent'] != null,
-        orElse: () => {},
-      );
-  if (producto.isNotEmpty) {
-    return (producto['percent'] as num?)?.toDouble() ?? 0;
+  return true;
+}
+
+double resolveProductLevelDiscountPercent(
+  List<dynamic> discounts, [
+  String? dateStr,
+]) {
+  final arr = discounts
+      .whereType<Map>()
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
+  final today = dateStr ?? caracasDateString();
+  for (final d in arr) {
+    if (d['name'] == 'Producto' &&
+        d['promoCampaignId'] != null &&
+        d['percent'] != null &&
+        _isDiscountLive(d, today)) {
+      return (d['percent'] as num?)?.toDouble() ?? 0;
+    }
   }
-  final first = arr.whereType<Map>().cast<Map>().firstWhere(
-        (d) => d['percent'] != null,
-        orElse: () => {},
-      );
-  return (first['percent'] as num?)?.toDouble() ?? 0;
+  for (final d in arr) {
+    if (d['name'] == 'Producto' &&
+        d['promoCampaignId'] == null &&
+        d['percent'] != null) {
+      return (d['percent'] as num?)?.toDouble() ?? 0;
+    }
+  }
+  for (final d in arr) {
+    if (d['percent'] != null && d['promoCampaignId'] == null) {
+      return (d['percent'] as num?)?.toDouble() ?? 0;
+    }
+  }
+  return 0;
+}
+
+Map<String, dynamic>? findPresentationDiscount(
+  List<dynamic> discounts,
+  String name, [
+  String? dateStr,
+]) {
+  final arr = discounts
+      .whereType<Map>()
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
+  final today = dateStr ?? caracasDateString();
+  final named =
+      arr.where((d) => d['name'] == name && d['percent'] != null).toList();
+  for (final d in named) {
+    if (d['promoCampaignId'] != null && _isDiscountLive(d, today)) return d;
+  }
+  for (final d in named) {
+    if (d['promoCampaignId'] == null) return d;
+  }
+  return null;
+}
+
+String presentationDiscountName(String presentacion) {
+  final p = presentacion.trim().toLowerCase();
+  if (p == 'mayor') return 'Mayor';
+  if (p == 'bulto' || p == 'caja' || p == 'lote') return 'Bulto';
+  return 'Unidad';
+}
+
+double resolvePresentationDiscountPercent(
+  List<dynamic> discounts,
+  String presentacion, [
+  String? dateStr,
+]) {
+  final fallback = resolveProductLevelDiscountPercent(discounts, dateStr);
+  final named = findPresentationDiscount(
+    discounts,
+    presentationDiscountName(presentacion),
+    dateStr,
+  );
+  if (named != null) return (named['percent'] as num?)?.toDouble() ?? 0;
+  return fallback;
 }
 
 double getCasheaAdjustedUnitPrice(

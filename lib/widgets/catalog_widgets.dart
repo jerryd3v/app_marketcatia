@@ -101,7 +101,9 @@ class _ProductCardState extends State<ProductCard> {
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
     final isWholesale = app.isWholesale;
-    final discount = resolveProductLevelDiscountPercent(product.discounts);
+    final presKey = isWholesale ? _selectedPres : 'Unidad';
+    final discount =
+        resolvePresentationDiscountPercent(product.discounts, presKey);
     final options = _options(isWholesale);
     if (options.isNotEmpty && !options.any((o) => o.key == _selectedPres)) {
       _selectedPres = options.first.key;
@@ -232,6 +234,7 @@ class _ProductCardState extends State<ProductCard> {
                       selected: _selectedPres,
                       onSelect: (k) => setState(() => _selectedPres = k),
                       isCashea: app.isCashea,
+                      discounts: product.discounts,
                     )
                   else
                     const Text(
@@ -248,26 +251,10 @@ class _ProductCardState extends State<ProductCard> {
                     children: [
                       Expanded(
                         child: discount > 0 && strike != null
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '\$${_priceFmt.format(strike)}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textLight,
-                                      decoration: TextDecoration.lineThrough,
-                                    ),
-                                  ),
-                                  Text(
-                                    '\$${_priceFmt.format(display)}',
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.discount,
-                                    ),
-                                  ),
-                                ],
+                            ? _PriceFooter(
+                                strike: strike,
+                                display: display,
+                                discount: discount,
                               )
                             : Text(
                                 '\$${_priceFmt.format(display)}',
@@ -317,6 +304,7 @@ class _ProductCardState extends State<ProductCard> {
                         selected: _selectedPres,
                         onSelect: (k) => setState(() => _selectedPres = k),
                         isCashea: app.isCashea,
+                        discounts: product.discounts,
                       )
                     else
                       const Text(
@@ -333,26 +321,10 @@ class _ProductCardState extends State<ProductCard> {
                       children: [
                         Expanded(
                           child: discount > 0 && strike != null
-                              ? Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '\$${_priceFmt.format(strike)}',
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: AppColors.textLight,
-                                        decoration: TextDecoration.lineThrough,
-                                      ),
-                                    ),
-                                    Text(
-                                      '\$${_priceFmt.format(display)}',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.discount,
-                                      ),
-                                    ),
-                                  ],
+                              ? _PriceFooter(
+                                  strike: strike,
+                                  display: display,
+                                  discount: discount,
                                 )
                               : Text(
                                   '\$${_priceFmt.format(display)}',
@@ -384,6 +356,60 @@ class _ProductCardState extends State<ProductCard> {
   }
 }
 
+class _PriceFooter extends StatelessWidget {
+  const _PriceFooter({
+    required this.strike,
+    required this.display,
+    required this.discount,
+  });
+
+  final double strike;
+  final double display;
+  final double discount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 2,
+      children: [
+        Text(
+          '\$${_priceFmt.format(strike)}',
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textLight,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+        Text(
+          '\$${_priceFmt.format(display)}',
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: AppColors.discount,
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.discountBg,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '-${discount.round()}%',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppColors.discount,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CardPres {
   const _CardPres({
     required this.key,
@@ -406,12 +432,14 @@ class _PresentationSelector extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.isCashea,
+    required this.discounts,
   });
 
   final List<_CardPres> options;
   final String selected;
   final ValueChanged<String> onSelect;
   final bool isCashea;
+  final List<dynamic> discounts;
 
   @override
   Widget build(BuildContext context) {
@@ -484,7 +512,20 @@ class _PresentationSelector extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '\$${_priceFmt.format(getCasheaAdjustedUnitPrice(o.price, o.key, isCashea))}',
+                          '\$${_priceFmt.format(() {
+                            final d = resolvePresentationDiscountPercent(
+                              discounts,
+                              o.key,
+                            );
+                            final base = getCasheaAdjustedUnitPrice(
+                              o.price,
+                              o.key,
+                              isCashea,
+                            );
+                            return d > 0
+                                ? redondear(base * (1 - d / 100))
+                                : base;
+                          }())}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(

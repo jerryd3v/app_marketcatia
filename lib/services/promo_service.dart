@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/campaign_product.dart';
 import '../models/models.dart';
 import '../utils/caracas_date.dart';
-
-/// Lógica alineada con `marketcatia/src/services/promoService.js`.
 class PromoService {
   PromoService({FirebaseFirestore? db}) : _db = db ?? FirebaseFirestore.instance;
 
@@ -80,13 +78,54 @@ class PromoService {
     return out;
   }
 
-  double resolveCampaignDiscount(Map? entry, dynamic globalDiscountPercent) {
+  double resolveCampaignDiscount(
+    Map? entry,
+    dynamic globalDiscountPercent, {
+    String presentation = 'Unidad',
+  }) {
+    final byPres = switch (presentation) {
+      'Mayor' => entry?['discountMayor'],
+      'Bulto' => entry?['discountBulto'],
+      _ => entry?['discountUnidad'],
+    };
+    if (byPres != null && '$byPres'.trim().isNotEmpty) {
+      return (byPres is num) ? byPres.toDouble() : double.tryParse('$byPres') ?? 0;
+    }
     final per = entry?['discountPercent'];
     if (per != null && '$per'.trim().isNotEmpty) {
       return (per is num) ? per.toDouble() : double.tryParse('$per') ?? 0;
     }
     if (globalDiscountPercent is num) return globalDiscountPercent.toDouble();
     return double.tryParse('$globalDiscountPercent') ?? 0;
+  }
+
+  Product _productWithCampaignDiscounts(
+    Product product,
+    Map entry,
+    dynamic globalDiscountPercent,
+    String? promoCampaignId,
+    Map<String, dynamic>? campaign,
+  ) {
+    final extras = <Map<String, dynamic>>[];
+    final start = campaign?['startDate']?.toString();
+    final end = campaign?['endDate']?.toString();
+    for (final pres in ['Unidad', 'Mayor', 'Bulto']) {
+      final pct = resolveCampaignDiscount(
+        entry,
+        globalDiscountPercent,
+        presentation: pres,
+      );
+      if (pct <= 0) continue;
+      extras.add({
+        'name': pres,
+        'percent': pct,
+        if (promoCampaignId != null) 'promoCampaignId': promoCampaignId,
+        if (start != null && start.isNotEmpty) 'promoStartDate': start,
+        if (end != null && end.isNotEmpty) 'promoEndDate': end,
+      });
+    }
+    if (extras.isEmpty) return product;
+    return product.copyWith(discounts: [...extras, ...product.discounts]);
   }
 
   double getProductBasePrice(Product product, String modo) {
@@ -169,16 +208,28 @@ class PromoService {
     required List<CategoryItem> categorias,
     String? promoSource,
     String? promoCampaignId,
+    Map<String, dynamic>? campaign,
   }) {
-    final discount = resolveCampaignDiscount(entry, globalDiscountPercent);
-    final base = getProductBasePrice(product, modo);
+    final displayProduct = _productWithCampaignDiscounts(
+      product,
+      entry,
+      globalDiscountPercent,
+      promoCampaignId,
+      campaign,
+    );
+    final discount = resolveCampaignDiscount(
+      entry,
+      globalDiscountPercent,
+      presentation: modo == 'wholesale' ? 'Mayor' : 'Unidad',
+    );
+    final base = getProductBasePrice(displayProduct, modo);
     final offer = base * (1 - discount / 100);
-    final cat = resolveProductCategory(product, categorias);
+    final cat = resolveProductCategory(displayProduct, categorias);
     return CampaignProductView(
-      id: product.id,
-      product: product,
-      nombre: product.name,
-      imgUrl: product.displayImage,
+      id: displayProduct.id,
+      product: displayProduct,
+      nombre: displayProduct.name,
+      imgUrl: displayProduct.displayImage,
       basePrice: base,
       discountPercent: discount,
       offerPrice: offer,
@@ -220,6 +271,7 @@ class PromoService {
           categorias: categorias,
           promoSource: promoSource,
           promoCampaignId: campaign?['id']?.toString(),
+          campaign: campaign,
         ),
       );
     }
