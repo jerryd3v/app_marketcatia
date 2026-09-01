@@ -6,6 +6,7 @@ import 'providers/app_provider.dart';
 import 'router/app_router.dart';
 import 'services/background_music_controller.dart';
 import 'theme/app_theme.dart';
+import 'widgets/cart_price_sync_lifecycle.dart';
 
 class MarketcatiaApp extends StatefulWidget {
   const MarketcatiaApp({super.key});
@@ -42,11 +43,14 @@ class _MarketcatiaAppState extends State<MarketcatiaApp> {
         ChangeNotifierProvider.value(value: _provider),
         ChangeNotifierProvider.value(value: _music),
       ],
-      child: MaterialApp.router(
-        title: 'Marketcatia',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        routerConfig: _router,
+      child: CartPriceSyncLifecycle(
+        provider: _provider,
+        child: MaterialApp.router(
+          title: 'Marketcatia',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light,
+          routerConfig: _router,
+        ),
       ),
     );
   }

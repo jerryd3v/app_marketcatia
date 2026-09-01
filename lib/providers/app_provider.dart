@@ -74,8 +74,13 @@ class AppProvider extends ChangeNotifier {
   bool firebaseReady = false;
 
   Timer? _searchDebounce;
+  Timer? _cartPriceSyncTimer;
   String? _pendingSedeId;
   StreamSubscription<User?>? _authSub;
+  bool _cartPriceSyncPaused = false;
+  DateTime _lastCartPriceSync = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _cartPriceSyncMinGap = Duration(seconds: 4);
+  static const _cartPriceSyncInterval = Duration(seconds: 15);
 
   CategoryItem? get categoriaActual => categoriaSeleccionada;
   Map<String, dynamic>? get subcategoriaActual => subcategoriaSeleccionada;
@@ -115,8 +120,60 @@ class AppProvider extends ChangeNotifier {
       firebaseReady = Firebase.apps.isNotEmpty;
     } finally {
       loadingInit = false;
+      _startCartPriceSyncTimer();
+      if (carrito.isNotEmpty) {
+        unawaited(refreshCartPricesFromCatalog());
+      }
       notifyListeners();
     }
+  }
+
+  void setCartPriceSyncPaused(bool paused) {
+    _cartPriceSyncPaused = paused;
+  }
+
+  void onAppResumed() {
+    if (carrito.isEmpty || _cartPriceSyncPaused) return;
+    unawaited(refreshCartPricesFromCatalog());
+  }
+
+  void _startCartPriceSyncTimer() {
+    _cartPriceSyncTimer?.cancel();
+    _cartPriceSyncTimer = Timer.periodic(_cartPriceSyncInterval, (_) {
+      if (carrito.isEmpty || _cartPriceSyncPaused) return;
+      unawaited(refreshCartPricesFromCatalog());
+    });
+  }
+
+  Future<bool> refreshCartPricesFromCatalog() async {
+    if (_cartPriceSyncPaused || carrito.isEmpty) return false;
+    final now = DateTime.now();
+    if (now.difference(_lastCartPriceSync) < _cartPriceSyncMinGap) {
+      return false;
+    }
+    _lastCartPriceSync = now;
+
+    final ids = carrito.map((e) => e.id).where((id) => id.isNotEmpty).toSet();
+    final products = await _promo.fetchProductsByIds(ids.toList());
+    if (products.isEmpty) return false;
+
+    final productMap = {for (final p in products) p.id: p};
+    final result = applyCatalogPricesToCartLines(
+      carrito,
+      productMap,
+      isCasheaFlow: isCashea,
+      resolveDiscount: (discounts, _) =>
+          resolveProductLevelDiscountPercent(discounts),
+    );
+    if (!result.changed) return false;
+
+    carrito = syncCartLinesWithPaymentModality(
+      result.lines,
+      cartPaymentModality,
+    );
+    await _persistCart();
+    notifyListeners();
+    return true;
   }
 
   void _listenAuthState() {
@@ -777,6 +834,7 @@ class AppProvider extends ChangeNotifier {
   void dispose() {
     _authSub?.cancel();
     _searchDebounce?.cancel();
+    _cartPriceSyncTimer?.cancel();
     searchFocusNode.dispose();
     super.dispose();
   }

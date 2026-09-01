@@ -105,6 +105,97 @@ double getCasheaAdjustedUnitPrice(
   return redondear(catalogUnitPrice * (1 + casheaBulkSurchargeRate));
 }
 
+double catalogPriceForPresentation(Product product, String presentacion) {
+  switch (presentacion) {
+    case 'Mayor':
+      return product.priceMayor ?? product.price ?? 0;
+    case 'Bulto':
+    case 'Caja':
+    case 'Lote':
+      return product.priceBulto ?? product.price ?? 0;
+    default:
+      return product.price ?? 0;
+  }
+}
+
+typedef CartLineDiscountResolver = double Function(
+  List<dynamic> discounts,
+  String presentacion,
+);
+
+CartItem refreshCartLineFromProduct(
+  CartItem item,
+  Product product, {
+  required bool isCasheaFlow,
+  required CartLineDiscountResolver resolveDiscount,
+}) {
+  final pres = item.presentacion;
+  final qty = item.cantidad < 1 ? 1 : item.cantidad;
+  var unitPrice = catalogPriceForPresentation(product, pres);
+  final discountPct = resolveDiscount(product.discounts, pres);
+  if (discountPct > 0) {
+    unitPrice = redondear(unitPrice * (1 - discountPct / 100));
+  }
+  var precioFinal = unitPrice;
+  final catalogPrice = unitPrice;
+  if (isCasheaFlow) {
+    precioFinal = getCasheaAdjustedUnitPrice(unitPrice, pres, true);
+  }
+
+  return CartItem(
+    id: item.id,
+    nombre: product.name,
+    codigo: product.codigo ?? item.codigo,
+    precio: precioFinal,
+    precioOri: catalogPrice,
+    presentacion: pres,
+    cantidad: qty,
+    totalAux: redondear(precioFinal * qty),
+    precioUnidad: product.price,
+    precioMayor: product.priceMayor,
+    precioBulto: product.priceBulto,
+    cantidadBulto: item.cantidadBulto,
+    cantidadUnidadOri: product.cantidadUnidad,
+    cantidadMayorOri: product.cantidadMayor,
+    cantidadBultoOri: product.cantidadBulto,
+    imgUrl100: product.imgUrl100 ?? product.imgUrl ?? item.imgUrl100,
+    discounts: product.discounts,
+    taxable: product.taxable,
+    ivaRate: product.ivaRate,
+    peso: product.peso,
+    casheaSurchargeApplied: isCasheaFlow && presentationIsCasheaBulk(pres),
+    precioCatalogoPresentacion: catalogPrice,
+    presentaciones: item.presentaciones,
+  );
+}
+
+({List<CartItem> lines, bool changed}) applyCatalogPricesToCartLines(
+  List<CartItem> items,
+  Map<String, Product> productsById, {
+  required bool isCasheaFlow,
+  required CartLineDiscountResolver resolveDiscount,
+}) {
+  if (items.isEmpty) return (lines: items, changed: false);
+  var changed = false;
+  final lines = items.map((item) {
+    final product = productsById[item.id];
+    if (product == null) return item;
+    final refreshed = refreshCartLineFromProduct(
+      item,
+      product,
+      isCasheaFlow: isCasheaFlow,
+      resolveDiscount: resolveDiscount,
+    );
+    if (refreshed.precio != item.precio ||
+        refreshed.totalAux != item.totalAux ||
+        refreshed.precioOri != item.precioOri) {
+      changed = true;
+    }
+    return refreshed;
+  }).toList();
+  return (lines: lines, changed: changed);
+}
+
 double resolveCartLineCatalogUnitPrice(CartItem item) {
   double fromPresentation = double.nan;
   switch (item.presentacion) {

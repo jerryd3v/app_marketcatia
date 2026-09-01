@@ -22,6 +22,7 @@ import '../utils/pricing.dart';
 import '../utils/user_location.dart';
 import '../constants/geo_reference.dart';
 import '../widgets/add_products_modal.dart';
+import '../widgets/cart_price_notice.dart';
 import '../widgets/delivery_map_section.dart';
 
 /// Origen de la orden (mismo campo `plataform` que usa la web).
@@ -116,6 +117,11 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.embedded) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<AppProvider>().setCartPriceSyncPaused(true);
+      });
+    }
     _loadRates();
     _loadPagoMovilStore();
   }
@@ -570,6 +576,31 @@ class _CartScreenState extends State<CartScreen> {
         );
         if (!ok) return;
       }
+      if (!widget.embedded) {
+        final changed = await provider.refreshCartPricesFromCatalog();
+        if (changed && mounted) {
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Precios actualizados'),
+              content: const Text(
+                'Algunos precios cambiaron según el catálogo. Revisa tu pedido antes de continuar.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Revisar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Continuar'),
+                ),
+              ],
+            ),
+          );
+          if (proceed != true) return;
+        }
+      }
       setState(() => _step = 1);
       return;
     }
@@ -587,6 +618,9 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   void dispose() {
+    if (widget.embedded) {
+      context.read<AppProvider>().setCartPriceSyncPaused(false);
+    }
     _refCtrl.dispose();
     _phoneCtrl.dispose();
     _amountBsCtrl.dispose();
@@ -721,6 +755,7 @@ class _CartScreenState extends State<CartScreen> {
           icon: Icons.inventory_2_outlined,
           child: Column(
             children: [
+              if (!widget.embedded) const CartPriceNotice(),
               if (_cart.isEmpty)
                 Container(
                   width: double.infinity,
