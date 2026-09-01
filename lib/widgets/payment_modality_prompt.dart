@@ -1,19 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../constants/cart_payment_modality.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/firebase_auth_session.dart';
 
 class PaymentModalityPrompt extends StatelessWidget {
   const PaymentModalityPrompt({super.key});
+
+  Future<void> _pick(BuildContext context, String value) async {
+    final app = context.read<AppProvider>();
+    if (value == CartPaymentModality.pagoMovil) {
+      await FirebaseAuthSession.checkPagoMovilSelection(
+        context,
+        app,
+        returnTo: GoRouterState.of(context).uri.path,
+      );
+    }
+    app.setCartPaymentModality(value);
+  }
 
   @override
   Widget build(BuildContext context) {
     final app = context.watch<AppProvider>();
     if (app.cartPaymentModality != null) return const SizedBox.shrink();
 
-    // No depende de GoRouterState (puede fallar fuera del árbol de rutas).
     return Positioned.fill(
       child: ColoredBox(
         color: const Color(0x99000000),
@@ -65,9 +78,7 @@ class PaymentModalityPrompt extends StatelessWidget {
                             color: AppColors.primary, size: 28),
                         title: 'Pago Móvil',
                         subtitle: 'Transferencia bancaria inmediata',
-                        onTap: () => app.setCartPaymentModality(
-                          CartPaymentModality.pagoMovil,
-                        ),
+                        onTap: () => _pick(context, CartPaymentModality.pagoMovil),
                       ),
                       const SizedBox(height: 10),
                       _Option(
@@ -82,9 +93,7 @@ class PaymentModalityPrompt extends StatelessWidget {
                         ),
                         title: 'Cashea',
                         subtitle: 'Pago en cuotas sin tarjeta',
-                        onTap: () => app.setCartPaymentModality(
-                          CartPaymentModality.cashea,
-                        ),
+                        onTap: () => _pick(context, CartPaymentModality.cashea),
                       ),
                     ],
                   ),

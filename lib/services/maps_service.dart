@@ -68,6 +68,35 @@ class MapsService {
     }
   }
 
+  Future<LatLng?> geocodeAddress(String address) async {
+    final query = address.trim();
+    if (query.isEmpty) return null;
+    final uri = Uri.https(
+      'maps.googleapis.com',
+      '/maps/api/geocode/json',
+      {
+        'address': query,
+        'key': ApiConfig.googleMapsApiKey,
+        'language': 'es',
+      },
+    );
+    try {
+      final res = await http.get(uri);
+      if (res.statusCode >= 400) return null;
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['status'] != 'OK') return null;
+      final results = data['results'] as List? ?? [];
+      if (results.isEmpty) return null;
+      final loc = (results.first as Map)['geometry']?['location'] as Map?;
+      final lat = (loc?['lat'] as num?)?.toDouble();
+      final lng = (loc?['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return null;
+      return LatLng(lat, lng);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String?> reverseGeocode(LatLng pos) async {
     final uri = Uri.https(
       'maps.googleapis.com',

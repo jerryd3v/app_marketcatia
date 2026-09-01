@@ -246,6 +246,39 @@ class ApiService {
     }
   }
 
+  /// Resuelve coordenadas desde enlace corto goo.gl vía API (paridad web).
+  Future<({double lat, double lng})?> expandMapUrl(String url) async {
+    final seen = <String>{};
+    for (final base in ApiConfig.mapExpandApiBases) {
+      if (base.isEmpty || !seen.add(base)) continue;
+      for (final path in ApiConfig.expandMapUrlPaths) {
+        try {
+          final uri = Uri.parse('$base$path').replace(
+            queryParameters: {'url': url.trim()},
+          );
+          final res = await http.get(uri).timeout(const Duration(seconds: 15));
+          if (res.statusCode >= 400) continue;
+          final data = jsonDecode(res.body) as Map<String, dynamic>;
+          final coords = data['coords'];
+          if (coords is Map) {
+            final lat = (coords['lat'] as num?)?.toDouble();
+            final lng = (coords['lng'] as num?)?.toDouble();
+            if (lat != null &&
+                lng != null &&
+                lat.isFinite &&
+                lng.isFinite &&
+                !(lat == 0 && lng == 0)) {
+              return (lat: lat, lng: lng);
+            }
+          }
+        } catch (_) {
+          // siguiente base / path
+        }
+      }
+    }
+    return null;
+  }
+
   Future<void> changePassword({
     required String userId,
     required String newPassword,

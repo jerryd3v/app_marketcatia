@@ -17,6 +17,7 @@ import '../services/api_service.dart';
 import '../services/firebase_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/delivery_cost.dart';
+import '../utils/firebase_auth_session.dart';
 import '../utils/pricing.dart';
 import '../utils/user_location.dart';
 import '../constants/geo_reference.dart';
@@ -441,6 +442,16 @@ class _CartScreenState extends State<CartScreen> {
       await _firebase.createOrder(orderData, docId: orderId);
 
       if (_paymentImage != null) {
+        if (!await FirebaseAuthSession.hasValidSession(provider.firebase.auth)) {
+          await provider.clearStaleUser();
+          if (mounted) {
+            await FirebaseAuthSession.showExpiredDialog(
+              context,
+              returnTo: '/cart',
+            );
+          }
+          return;
+        }
         final ext = _paymentImageName?.split('.').last ?? 'jpg';
         final url = await _firebase.uploadPaymentImage(
           orderId,
@@ -500,7 +511,12 @@ class _CartScreenState extends State<CartScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      final raw = e.toString().replaceFirst('Exception: ', '');
+      var raw = e.toString().replaceFirst('Exception: ', '');
+      if (raw.contains('unauthorized') ||
+          raw.contains('permission-denied') ||
+          raw.contains('requires an authenticated user')) {
+        raw = FirebaseAuthSession.expiredText;
+      }
       setState(() {
         _error = raw.contains('Sin conexión')
             ? raw
@@ -509,6 +525,64 @@ class _CartScreenState extends State<CartScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Future<void> _onModalityChanged(String modality) async {
+    final provider = context.read<AppProvider>();
+    if (modality == CartPaymentModality.pagoMovil) {
+      await FirebaseAuthSession.checkPagoMovilSelection(
+        context,
+        provider,
+        returnTo: '/cart',
+      );
+    }
+    provider.setCartPaymentModality(modality);
+  }
+
+  Future<void> _handleCheckoutAction() async {
+    if (_step == 0) {
+      if (_cart.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Agrega productos al carrito antes de continuar.'),
+          ),
+        );
+        return;
+      }
+      final provider = context.read<AppProvider>();
+      if (provider.user == null) {
+        context.push('/login?returnTo=${Uri.encodeComponent('/cart')}');
+        return;
+      }
+      if (_deliveryType == 'delivery' && _deliveryDest == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Marca tu ubicación en el mapa para continuar'),
+          ),
+        );
+        return;
+      }
+      if (!_isCashea) {
+        final ok = await FirebaseAuthSession.ensureSessionOrPrompt(
+          context,
+          provider,
+          returnTo: '/cart',
+        );
+        if (!ok) return;
+      }
+      setState(() => _step = 1);
+      return;
+    }
+    if (_step == 1) {
+      final err = _validatePaymentProof();
+      if (err != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err)),
+        );
+        return;
+      }
+    }
+    await _createOrder();
   }
 
   @override
@@ -549,8 +623,7 @@ class _CartScreenState extends State<CartScreen> {
                     const SizedBox(height: 4),
                     _ModalitySwitcher(
                       modality: _modality,
-                      onChanged: (m) =>
-                          context.read<AppProvider>().setCartPaymentModality(m),
+                      onChanged: _onModalityChanged,
                     ),
                   ],
                   if (_error != null) ...[
@@ -634,7 +707,9 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () => context.push('/login'),
+                    onPressed: () => context.push(
+                      '/login?returnTo=${Uri.encodeComponent('/cart')}',
+                    ),
                     child: const Text('Iniciar sesión'),
                   ),
                 ],
@@ -1419,50 +1494,7 @@ class _CartScreenState extends State<CartScreen> {
                   borderRadius: BorderRadius.circular(AppColors.radiusMd),
                 ),
                 child: ElevatedButton(
-                  onPressed: _submitting
-                      ? null
-                      : () {
-                          if (_step == 0) {
-                            if (_cart.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Agrega productos al carrito antes de continuar.',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            final user = context.read<AppProvider>().user;
-                            if (user == null) {
-                              context.push('/login');
-                              return;
-                            }
-                            if (_deliveryType == 'delivery' &&
-                                _deliveryDest == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Marca tu ubicación en el mapa para continuar',
-                                  ),
-                                ),
-                              );
-                              return;
-                            }
-                            setState(() => _step = 1);
-                          } else {
-                            if (_step == 1) {
-                              final err = _validatePaymentProof();
-                              if (err != null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(err)),
-                                );
-                                return;
-                              }
-                            }
-                            _createOrder();
-                          }
-                        },
+                  onPressed: _submitting ? null : _handleCheckoutAction,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,

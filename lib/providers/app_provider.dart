@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart' hide FirebaseService;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -74,6 +75,7 @@ class AppProvider extends ChangeNotifier {
 
   Timer? _searchDebounce;
   String? _pendingSedeId;
+  StreamSubscription<User?>? _authSub;
 
   CategoryItem? get categoriaActual => categoriaSeleccionada;
   Map<String, dynamic>? get subcategoriaActual => subcategoriaSeleccionada;
@@ -99,6 +101,7 @@ class AppProvider extends ChangeNotifier {
 
       firebaseReady = Firebase.apps.isNotEmpty;
       if (firebaseReady) {
+        _listenAuthState();
         await Future.wait([
           loadCategorias(),
           loadSedes(),
@@ -107,11 +110,6 @@ class AppProvider extends ChangeNotifier {
           loadBestSellers(),
           loadProductBrands(),
         ]);
-        final fbUser = _firebase.auth.currentUser;
-        if (fbUser != null && user == null) {
-          final u = await _firebase.fetchUser(fbUser.uid);
-          if (u != null) setUser(u);
-        }
       }
     } catch (_) {
       firebaseReady = Firebase.apps.isNotEmpty;
@@ -119,6 +117,20 @@ class AppProvider extends ChangeNotifier {
       loadingInit = false;
       notifyListeners();
     }
+  }
+
+  void _listenAuthState() {
+    _authSub?.cancel();
+    _authSub = _firebase.auth.authStateChanges().listen((fbUser) async {
+      if (fbUser == null) {
+        if (user != null) await clearStaleUser();
+        return;
+      }
+      if (user?.uid != fbUser.uid) {
+        final u = await _firebase.fetchUser(fbUser.uid);
+        if (u != null) setUser(u);
+      }
+    });
   }
 
   Future<void> _loadPersisted() async {
@@ -733,6 +745,13 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> clearStaleUser() async {
+    user = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_userKey);
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _firebase.signOut();
     user = null;
@@ -756,6 +775,7 @@ class AppProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _searchDebounce?.cancel();
     searchFocusNode.dispose();
     super.dispose();

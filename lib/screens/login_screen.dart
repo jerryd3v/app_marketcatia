@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../providers/app_provider.dart';
 import '../theme/app_colors.dart';
+import '../utils/firebase_auth_session.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -39,10 +40,28 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = context.read<AppProvider>().user;
-      if (user != null) context.go('/');
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final app = context.read<AppProvider>();
+      final returnTo = GoRouterState.of(context).uri.queryParameters['returnTo'];
+      final destination = (returnTo != null && returnTo.startsWith('/'))
+          ? returnTo
+          : (app.carrito.isNotEmpty ? '/cart' : '/');
+      if (app.user != null &&
+          await FirebaseAuthSession.hasValidSession(app.firebase.auth)) {
+        if (!mounted) return;
+        context.go(destination);
+      } else if (app.user != null) {
+        await app.clearStaleUser();
+      }
     });
+  }
+
+  String get _returnTo {
+    final returnTo = GoRouterState.of(context).uri.queryParameters['returnTo'];
+    if (returnTo != null && returnTo.startsWith('/')) return returnTo;
+    final app = context.read<AppProvider>();
+    return app.carrito.isNotEmpty ? '/cart' : '/';
   }
 
   @override
@@ -72,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen>
       final u = await app.firebase.fetchUser(cred.user!.uid);
       if (u != null) {
         app.setUser(u);
-        if (mounted) context.go('/');
+        if (mounted) context.go(_returnTo);
       } else {
         setState(() => error = 'Usuario sin perfil en Firestore');
       }
@@ -118,7 +137,7 @@ class _LoginScreenState extends State<LoginScreen>
         'createdAt': FieldValue.serverTimestamp(),
       });
       app.setUser(AppUser.fromJson(data));
-      if (mounted) context.go('/');
+      if (mounted) context.go(_returnTo);
     } on FirebaseAuthException catch (e) {
       setState(() => error = _authError(e));
     } catch (e) {

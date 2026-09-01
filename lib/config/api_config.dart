@@ -16,6 +16,17 @@ class ApiConfig {
   static const String orderNotification =
       'https://chatbot-marketcatia.up.railway.app/api/notification';
 
+  static const expandMapUrlPaths = [
+    '/utils/expand-map-url',
+    '/taxes/expand-map-url',
+  ];
+
+  static List<String> get mapExpandApiBases => [
+        apiBase.replaceAll(RegExp(r'/$'), ''),
+        'https://marketcatia-api.up.railway.app',
+        'https://exitodoiapi.up.railway.app',
+      ];
+
   static const String googleMapsApiKey =
       'AIzaSyDCOzZYe2dmIivoziaGME-SrjdhS23N6rw';
 

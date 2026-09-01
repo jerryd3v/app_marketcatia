@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:intl/intl.dart';
 
 import '../constants/geo_reference.dart';
+import '../services/api_service.dart';
 import '../services/maps_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/delivery_cost.dart';
+import '../utils/parse_location_input.dart';
 
 /// Sección Delivery con mapa — paridad con ShoppingCar web.
 class DeliveryMapSection extends StatefulWidget {
@@ -41,6 +44,7 @@ class DeliveryMapSection extends StatefulWidget {
 
 class _DeliveryMapSectionState extends State<DeliveryMapSection> {
   final _maps = MapsService();
+  final _api = ApiService();
   final _nameCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
   final _fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
@@ -51,6 +55,7 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
   double? _distanceKm;
   double _cost = 0;
   bool _routing = false;
+  bool _resolvingPaste = false;
   String? _routeError;
 
   @override
@@ -81,6 +86,56 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
   double get _rateAmount => widget.shippingSubtype == 'alta'
       ? widget.rates.amountPremium
       : widget.rates.amountStandard;
+
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text?.trim() ?? '';
+    if (text.isEmpty) {
+      setState(() => _routeError = 'No hay texto en el portapapeles.');
+      return;
+    }
+    setState(() {
+      _resolvingPaste = true;
+      _routeError = null;
+    });
+    try {
+      LatLng? target;
+      var label = text;
+
+      final direct = parseCoordsFromLocationInput(text);
+      if (direct != null) {
+        target = LatLng(direct.lat, direct.lng);
+      } else if (isGoogleMapsLink(text)) {
+        final expanded = await _api.expandMapUrl(text);
+        if (expanded != null) {
+          target = LatLng(expanded.lat, expanded.lng);
+        }
+      } else {
+        target = await _maps.geocodeAddress(text);
+        if (target != null) label = text;
+      }
+
+      if (target == null) {
+        setState(() => _routeError = 'No se pudo interpretar la dirección pegada.');
+        return;
+      }
+
+      _addressCtrl.text = label;
+      await _setDestination(target);
+    } finally {
+      if (mounted) setState(() => _resolvingPaste = false);
+    }
+  }
+
+  void _notifyParent() {
+    widget.onCostChanged(
+      cost: _cost,
+      distanceKm: _distanceKm,
+      destination: _destination,
+      address: _addressCtrl.text.trim(),
+      locationName: _nameCtrl.text.trim(),
+    );
+  }
 
   Future<void> _setDestination(LatLng pos) async {
     setState(() {
@@ -283,14 +338,43 @@ class _DeliveryMapSectionState extends State<DeliveryMapSection> {
           ),
         ),
         const SizedBox(height: 10),
-        TextField(
-          controller: _addressCtrl,
-          readOnly: true,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Dirección',
-            hintText: 'Selecciona un punto en el mapa',
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _addressCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Dirección',
+                  hintText: 'Selecciona en el mapa o pega un enlace',
+                ),
+                onChanged: (_) => _notifyParent(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Material(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: (_routing || _resolvingPaste) ? null : _pasteFromClipboard,
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: _resolvingPaste
+                      ? const Padding(
+                          padding: EdgeInsets.all(10),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.content_paste, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
         OutlinedButton.icon(
