@@ -81,10 +81,14 @@ class _CampaignScreenState extends State<CampaignScreen> {
         };
       }
 
+      final isOfferFlyerHome =
+          widget.isDailyOffers ||
+          (campaign['ctaAction'] ?? '').toString() == 'offer_flyer';
       final products = filterCampaignProductsForPlatform(
         await app.promo.resolveCampaignProducts(
           campaign,
-          modo: app.modo,
+          // Home / flyer / ofertas del día: precio de unidad (igual que la web).
+          modo: isOfferFlyerHome ? 'retail' : app.modo,
           categorias: app.categorias,
           promoSource: widget.isDailyOffers ? 'daily_offer' : 'banner',
         ),

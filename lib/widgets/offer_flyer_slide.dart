@@ -80,7 +80,8 @@ class _OfferFlyerSlideState extends State<OfferFlyerSlide> {
       final items = filterCampaignProductsForPlatform(
         await app.promo.resolveCampaignProducts(
           widget.banner,
-          modo: app.modo,
+          // Flyer home: siempre precio/descuento de unidad (igual que la web).
+          modo: 'retail',
           categorias: app.categorias,
           promoSource: 'banner',
         ),

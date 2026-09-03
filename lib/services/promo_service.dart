@@ -83,11 +83,22 @@ class PromoService {
     dynamic globalDiscountPercent, {
     String presentation = 'Unidad',
   }) {
-    final byPres = switch (presentation) {
-      'Mayor' => entry?['discountMayor'],
-      'Bulto' => entry?['discountBulto'],
-      _ => entry?['discountUnidad'],
-    };
+    final pres = presentation.trim();
+    final isMayor = pres == 'Mayor';
+    final isBulto = pres == 'Bulto' ||
+        pres == 'Caja' ||
+        pres == 'Lote' ||
+        pres.toLowerCase() == 'bulto' ||
+        pres.toLowerCase() == 'caja' ||
+        pres.toLowerCase() == 'lote';
+    dynamic byPres;
+    if (isMayor) {
+      byPres = entry?['discountMayor'];
+    } else if (isBulto) {
+      byPres = entry?['discountBulto'];
+    } else {
+      byPres = entry?['discountUnidad'];
+    }
     if (byPres != null && '$byPres'.trim().isNotEmpty) {
       return (byPres is num) ? byPres.toDouble() : double.tryParse('$byPres') ?? 0;
     }
@@ -128,12 +139,35 @@ class PromoService {
     return product.copyWith(discounts: [...extras, ...product.discounts]);
   }
 
-  double getProductBasePrice(Product product, String modo) {
-    if (modo == 'wholesale') {
-      return (product.priceBulto ?? product.priceMayor ?? product.price ?? 0)
-          .toDouble();
+  /// Alinea presentación con el tier de precio (misma regla que la web).
+  String resolveCampaignPresentation(Product product, String modo) {
+    if (modo != 'wholesale') return 'Unidad';
+    if (product.statusBulto && product.priceBulto != null) return 'Bulto';
+    if (product.statusMayor && product.priceMayor != null) return 'Mayor';
+    return 'Unidad';
+  }
+
+  double getProductPriceForPresentation(Product product, String presentation) {
+    final pres = presentation.trim();
+    if (pres == 'Mayor') {
+      return (product.priceMayor ?? product.price ?? 0).toDouble();
+    }
+    if (pres == 'Bulto' ||
+        pres == 'Caja' ||
+        pres == 'Lote' ||
+        pres.toLowerCase() == 'bulto' ||
+        pres.toLowerCase() == 'caja' ||
+        pres.toLowerCase() == 'lote') {
+      return (product.priceBulto ?? product.price ?? 0).toDouble();
     }
     return (product.price ?? 0).toDouble();
+  }
+
+  double getProductBasePrice(Product product, String modo) {
+    return getProductPriceForPresentation(
+      product,
+      resolveCampaignPresentation(product, modo),
+    );
   }
 
   ({String name, String icon}) resolveProductCategory(
@@ -217,12 +251,13 @@ class PromoService {
       promoCampaignId,
       campaign,
     );
+    final presentation = resolveCampaignPresentation(displayProduct, modo);
     final discount = resolveCampaignDiscount(
       entry,
       globalDiscountPercent,
-      presentation: modo == 'wholesale' ? 'Mayor' : 'Unidad',
+      presentation: presentation,
     );
-    final base = getProductBasePrice(displayProduct, modo);
+    final base = getProductPriceForPresentation(displayProduct, presentation);
     final offer = base * (1 - discount / 100);
     final cat = resolveProductCategory(displayProduct, categorias);
     return CampaignProductView(

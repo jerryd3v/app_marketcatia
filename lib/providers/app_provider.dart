@@ -405,7 +405,8 @@ class AppProvider extends ChangeNotifier {
         dailyOfferProducts = filterCampaignProductsForPlatform(
           await _promo.resolveCampaignProducts(
             offer,
-            modo: modo,
+            // Panel home: siempre precio/descuento de unidad (igual que la web).
+            modo: 'retail',
             categorias: categorias,
             promoSource: 'daily_offer',
           ),
