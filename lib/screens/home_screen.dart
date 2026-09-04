@@ -94,8 +94,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Home: marcas → banner → categorías → ofertas → más vendidos
-    // Marcas arriba del banner para no dejar hueco blanco bajo el buscador.
+    // Home: banners → ofertas del día → marcas → categorías → más vendidos
     return RefreshIndicator(
       onRefresh: () async {
         await Future.wait([
@@ -127,8 +126,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(fontSize: 12, color: AppColors.textMedium),
               ),
             ),
-          const BrandsSlider(),
           AdBannerCarousel(onScrollToOffers: _scrollToOffers),
+          KeyedSubtree(
+            key: _offersKey,
+            child: const DailyOffersSection(),
+          ),
+          const BrandsSlider(),
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
@@ -146,10 +149,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const CategoryGrid(),
-          KeyedSubtree(
-            key: _offersKey,
-            child: const DailyOffersSection(),
-          ),
           const StoreCommentsEntry(),
           const FeaturedCarousel(),
           const SizedBox(height: 24),
