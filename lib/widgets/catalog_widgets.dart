@@ -218,8 +218,6 @@ class _ProductCardState extends State<ProductCard> {
                 children: [
                   Text(
                     product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -288,8 +286,6 @@ class _ProductCardState extends State<ProductCard> {
                   children: [
                     Text(
                       product.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
