@@ -1030,8 +1030,8 @@ class _BestSellerTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Como la web: priceBulto || price + descuento de producto
-    final base = (product.priceBulto ?? product.price ?? 0).toDouble();
+    // Precio de unidad (no bulto ni mayor) + descuento de producto
+    final base = (product.price ?? 0).toDouble();
     final discount = resolveProductLevelDiscountPercent(product.discounts);
     final price = base * (1 - discount / 100);
     final img = product.displayImage;
