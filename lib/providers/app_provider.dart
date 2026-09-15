@@ -684,7 +684,7 @@ class AppProvider extends ChangeNotifier {
         precioUnidad: product.price,
         precioMayor: product.priceMayor,
         precioBulto: product.priceBulto,
-        cantidadBulto: product.cantidadBulto,
+        cantidadBulto: getPresentationBaseUnits(product, pres),
         cantidadUnidadOri: product.cantidadUnidad,
         cantidadMayorOri: product.cantidadMayor,
         cantidadBultoOri: product.cantidadBulto,

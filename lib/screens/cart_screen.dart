@@ -69,6 +69,8 @@ class _CartScreenState extends State<CartScreen> {
   LatLng? _deliveryDest;
   String? _deliveryAddress;
   String? _deliveryLocationName;
+  String? _deliveryZone;
+  String? _deliveryMapUrl;
   String? _selectedLocationId;
   bool _locationEditorOpen = false;
 
@@ -173,6 +175,8 @@ class _CartScreenState extends State<CartScreen> {
       _deliveryDest = (loc.lat != null && loc.lng != null)
           ? LatLng(loc.lat!, loc.lng!)
           : null;
+      _deliveryZone = loc.zone;
+      _deliveryMapUrl = loc.mapUrl;
       _locationEditorOpen = false;
     });
   }
@@ -358,6 +362,43 @@ class _CartScreenState extends State<CartScreen> {
           _deliveryType == 'delivery' ? 'delivery' : 'pickup';
       final orderAddress =
           deliveryType == 'pickup' ? kPickupStoreAddress : _deliveryAddress;
+      // Paridad con web (ShoppingCar): zona, mapUrl y delivery_location
+      // alimentan el link de mapa en el reporte de órdenes del admin.
+      final deliveryZone =
+          deliveryType == 'pickup' ? 'Pick Up' : _deliveryZone;
+      final deliveryMapUrl =
+          deliveryType == 'delivery' && _deliveryDest != null
+              ? (_deliveryMapUrl ??
+                  'https://www.google.com/maps?q=${_deliveryDest!.latitude},${_deliveryDest!.longitude}')
+              : null;
+      final deliveryLocation =
+          deliveryType == 'delivery' && _deliveryDest != null
+              ? <String, dynamic>{
+                  'latitude': _deliveryDest!.latitude,
+                  'longitude': _deliveryDest!.longitude,
+                  'address': orderAddress,
+                  'label': _deliveryLocationName,
+                  'zone': deliveryZone,
+                  'distanceKm': _deliveryDistanceKm,
+                  'mapUrl': deliveryMapUrl,
+                }
+              : null;
+      final locationData = deliveryType == 'pickup'
+          ? <String, dynamic>{
+              'type': 'pickup',
+              'address': kPickupStoreAddress,
+              'zone': 'Pick Up',
+            }
+          : <String, dynamic>{
+              'id': _selectedLocationId,
+              'title': _deliveryLocationName ?? deliveryZone,
+              'address': orderAddress,
+              'zone': deliveryZone,
+              'distance': _deliveryDistanceKm,
+              'mapUrl': deliveryMapUrl,
+              'lat': _deliveryDest?.latitude,
+              'lng': _deliveryDest?.longitude,
+            };
       final sede = provider.sedeSeleccionada;
       final numeroPedido = await _api.fetchNextOrderNumber();
       final orderId = '$numeroPedido';
@@ -385,7 +426,7 @@ class _CartScreenState extends State<CartScreen> {
         'documento': user.documento,
         'email': user.email,
         'direccion': orderAddress,
-        if (deliveryType == 'pickup') 'zona': 'Pick Up',
+        'zona': deliveryZone,
         'numeroPedido': numeroPedido,
         'costoTotal': _total,
         'products_total': _subtotal,
@@ -406,6 +447,12 @@ class _CartScreenState extends State<CartScreen> {
         'delivery_type': deliveryType,
         if (deliveryType == 'delivery') 'checkDelivery': 'Pendiente',
         'delivery_address': orderAddress,
+        'delivery_zone': deliveryZone,
+        'mapUrl': ?deliveryMapUrl,
+        if (_deliveryDistanceKm != null) 'distance': _deliveryDistanceKm,
+        if (_deliveryDistanceKm != null) 'distance_km': _deliveryDistanceKm,
+        'delivery_location': ?deliveryLocation,
+        'location': locationData,
         'order_comment': _commentCtrl.text.trim().isEmpty
             ? null
             : _commentCtrl.text.trim(),
@@ -861,6 +908,8 @@ class _CartScreenState extends State<CartScreen> {
                   _deliveryCost = 0;
                   _deliveryDistanceKm = null;
                   _deliveryAddress = kPickupStoreAddress;
+                  _deliveryZone = null;
+                  _deliveryMapUrl = null;
                 }),
               ),
               const SizedBox(height: 10),
@@ -959,6 +1008,9 @@ class _CartScreenState extends State<CartScreen> {
               _deliveryDest = destination;
               _deliveryAddress = address;
               _deliveryLocationName = locationName;
+              _deliveryZone =
+                  address == null || extractCity(address).isEmpty ? null : extractCity(address);
+              _deliveryMapUrl = null;
               _selectedLocationId = null;
             });
           },
