@@ -621,23 +621,45 @@ class ProductGrid extends StatelessWidget {
         ),
       );
     }
-    final isWholesale = context.watch<AppProvider>().isWholesale;
+    if (_compactProductCards) {
+      return CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            sliver: SliverToBoxAdapter(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  const crossAxisCount = 2;
+                  const spacing = 12.0;
+                  final itemWidth =
+                      (constraints.maxWidth - (crossAxisCount - 1) * spacing) /
+                          crossAxisCount;
+                  return Wrap(
+                    spacing: spacing,
+                    runSpacing: spacing,
+                    children: [
+                      for (final p in products)
+                        SizedBox(
+                          width: itemWidth,
+                          child: ProductCard(product: p),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      gridDelegate: _compactProductCards
-          ? SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              // Minorista ~200; Mayorista necesita chips Unid/Mayor/Bulto.
-              mainAxisExtent: isWholesale ? 248 : 200,
-            )
-          : const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisSpacing: 12,
-              crossAxisSpacing: 12,
-              childAspectRatio: 0.58,
-            ),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        childAspectRatio: 0.58,
+      ),
       itemCount: products.length,
       itemBuilder: (_, i) => ProductCard(product: products[i]),
     );

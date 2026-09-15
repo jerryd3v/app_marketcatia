@@ -151,7 +151,6 @@ class _CampaignScreenState extends State<CampaignScreen> {
     final isImage = _hero!['backgroundType'] == 'image' && bgImage.isNotEmpty;
     final compactCards =
         !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
-    final gridExtent = app.isWholesale ? 248.0 : 200.0;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -270,25 +269,41 @@ class _CampaignScreenState extends State<CampaignScreen> {
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-              sliver: SliverGrid(
-                gridDelegate: compactCards
-                    ? SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        mainAxisExtent: gridExtent,
-                      )
-                    : const SliverGridDelegateWithFixedCrossAxisCount(
+              sliver: compactCards
+                  ? SliverToBoxAdapter(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          const crossAxisCount = 2;
+                          const spacing = 12.0;
+                          final itemWidth =
+                              (constraints.maxWidth - (crossAxisCount - 1) * spacing) /
+                                  crossAxisCount;
+                          return Wrap(
+                            spacing: spacing,
+                            runSpacing: spacing,
+                            children: [
+                              for (final p in filtered)
+                                SizedBox(
+                                  width: itemWidth,
+                                  child: ProductCard(product: p.product),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    )
+                  : SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
                         mainAxisSpacing: 12,
                         crossAxisSpacing: 12,
                         childAspectRatio: 0.58,
                       ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, i) => ProductCard(product: filtered[i].product),
-                  childCount: filtered.length,
-                ),
-              ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => ProductCard(product: filtered[i].product),
+                        childCount: filtered.length,
+                      ),
+                    ),
             ),
         ],
       ),
