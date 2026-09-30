@@ -13,6 +13,7 @@ import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/firebase_service.dart';
 import '../services/promo_service.dart';
+import '../utils/active_promo_campaigns.dart';
 import '../utils/pricing.dart';
 
 class AppProvider extends ChangeNotifier {
@@ -107,6 +108,7 @@ class AppProvider extends ChangeNotifier {
       firebaseReady = Firebase.apps.isNotEmpty;
       if (firebaseReady) {
         _listenAuthState();
+        await refreshActivePromoCampaignIds(_promo);
         await Future.wait([
           loadCategorias(),
           loadSedes(),

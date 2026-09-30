@@ -1,5 +1,6 @@
 import '../constants/cart_payment_modality.dart';
 import '../models/models.dart';
+import 'active_promo_campaigns.dart';
 import 'caracas_date.dart';
 
 const double casheaBulkSurchargeRate = 0.05;
@@ -20,6 +21,11 @@ bool _isDiscountLive(Map d, [String? dateStr]) {
   return true;
 }
 
+bool _isUsableDiscount(Map d, [String? dateStr]) {
+  if (!isPromoCampaignActive(d['promoCampaignId']?.toString())) return false;
+  return _isDiscountLive(d, dateStr);
+}
+
 double resolveProductLevelDiscountPercent(
   List<dynamic> discounts, [
   String? dateStr,
@@ -33,7 +39,7 @@ double resolveProductLevelDiscountPercent(
     if (d['name'] == 'Producto' &&
         d['promoCampaignId'] != null &&
         d['percent'] != null &&
-        _isDiscountLive(d, today)) {
+        _isUsableDiscount(d, today)) {
       return (d['percent'] as num?)?.toDouble() ?? 0;
     }
   }
@@ -65,7 +71,7 @@ Map<String, dynamic>? findPresentationDiscount(
   final named =
       arr.where((d) => d['name'] == name && d['percent'] != null).toList();
   for (final d in named) {
-    if (d['promoCampaignId'] != null && _isDiscountLive(d, today)) return d;
+    if (d['promoCampaignId'] != null && _isUsableDiscount(d, today)) return d;
   }
   for (final d in named) {
     if (d['promoCampaignId'] == null) return d;
