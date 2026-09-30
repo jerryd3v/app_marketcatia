@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import '../models/campaign_product.dart';
 import '../models/models.dart';
 
-/// App Store 1.4.3: no facilitar venta/promoción de tabaco en iOS.
+/// App Store 1.4.3 y Google Play: no facilitar venta/promoción de tabaco.
 bool get hideTobaccoOnThisPlatform =>
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+    !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android);
 
 bool looksLikeTobaccoText(String? value) {
   if (value == null || value.trim().isEmpty) return false;
