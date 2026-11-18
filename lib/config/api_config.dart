@@ -28,7 +28,7 @@ class ApiConfig {
       ];
 
   static const String googleMapsApiKey =
-      'AIzaSyDCOzZYe2dmIivoziaGME-SrjdhS23N6rw';
+      'AIzaSyAhtjQSE4iIzWXq4drXARYF_W-A1oAv7hw';
 
   static String chatbotWsUrl(String? sessionId) {
     final u = Uri.parse(apiBase);
